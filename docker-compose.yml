@@ -1,0 +1,9 @@
+version: "3.2"
+services:
+  rabbitmq:
+    image: docker-rabbitmq-streams
+    container_name: 'rabbitmq'
+    ports:
+        - 5552:5552
+        - 5672:5672
+        - 15672:15672
