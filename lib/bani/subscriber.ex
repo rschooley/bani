@@ -48,19 +48,19 @@ defmodule Bani.Subscriber do
 
   @impl true
   def handle_info({:deliver, _response_code, chunk}, state) do
-    result = state.message_processor.process(
+    processed = state.message_processor.process(
       &state.broker.chunk_to_messages/1,
       state.handler,
       chunk,
       state.acc
     )
 
-    case result do
-      {:ok, message} ->
+    case processed do
+      {:ok, result} ->
         new_state =
           state
           |> Map.put(:offset, state.offset + 1)
-          |> Map.put(:acc, message)
+          |> Map.put(:acc, result)
 
         {:noreply, new_state}
 
