@@ -24,7 +24,7 @@ defmodule Bani.MessageProcessorTest do
     acc = nil
 
     assert_raise MatchError, fn ->
-      Bani.MessageProcessor.process(parser_fn, processing_fn, chunk, acc) |> IO.inspect()
+      Bani.MessageProcessor.process(parser_fn, processing_fn, chunk, acc)
     end
   end
 

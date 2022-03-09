@@ -22,10 +22,12 @@ defmodule Bani.Broker do
   end
 
   @impl Bani.BrokerBehaviour
-  def subscribe(conn, stream_name, subscription_id, offset \\ :first)
-      when is_pid(conn) and is_binary(stream_name) and is_integer(subscription_id) do
-    :lake.subscribe(conn, stream_name, subscription_id, offset, 1000, [])
+  def subscribe(conn, stream_name, subscription_id, offset \\ 0)
+      when is_pid(conn) and is_binary(stream_name) and is_integer(subscription_id) and is_integer(offset) do
+    :lake.subscribe(conn, stream_name, subscription_id, {:offset, offset}, 1000, [])
   end
+
+  # TODO: offset atom
 
   @impl Bani.BrokerBehaviour
   def unsubscribe(conn, subscription_id) when is_pid(conn) and is_integer(subscription_id) do

@@ -9,8 +9,9 @@ defmodule Bani.Application do
   def start(_type, _args) do
     children = [
       {Registry, keys: :unique, name: Bani.Registry},
-      # {Bani.Scheduler},
-      {Bani.DynamicSupervisor, []}
+      {Registry, keys: :duplicate, name: Bani.AvailableConnectionRegistry},
+      {Bani.SchedulerDynamicSupervisor, []},
+      {Bani.ConnectionDynamicSupervisor, []}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
