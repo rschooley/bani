@@ -70,6 +70,9 @@ defmodule Bani.PublisherTest do
   end
 
   test "publishes" do
+    test_pid = self()
+    ref = make_ref()
+
     stream_name = "publisher-publishes"
     conn = self()
     publisher_id = 0
@@ -82,6 +85,8 @@ defmodule Bani.PublisherTest do
       assert publisher_id_ == publisher_id
       assert message_ == message
       assert publishing_id_ == 0
+
+      Process.send(test_pid, {:expect_called, ref}, [])
 
       :ok
     end)
@@ -96,6 +101,7 @@ defmodule Bani.PublisherTest do
     start_supervised!({Bani.Publisher, opts})
 
     assert :ok = Bani.Publisher.publish_sync(stream_name, message)
+    assert_receive {:expect_called, ^ref}
   end
 
   test "increments publishing id" do
