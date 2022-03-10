@@ -25,12 +25,8 @@ defmodule Bani.ConnectionManager do
     GenServer.call(pid, {:register, key, available_ids})
   end
 
-  def add_publisher(pid, key, stream_name, available_ids) do
-    GenServer.call(pid, {:add_publisher, key, stream_name, available_ids})
-  end
-
-  def add_subscriber(pid, key, stream_name, available_ids, handler) do
-    GenServer.call(pid, {:add_subscriber, key, stream_name, available_ids, handler})
+  def lease(pid, key, available_ids, pubsub_type) do
+    GenServer.call(pid, {:lease, key, available_ids, pubsub_type})
   end
 
   # Callbacks
@@ -76,23 +72,11 @@ defmodule Bani.ConnectionManager do
   end
 
   @impl true
-  def handle_call({:add_publisher, key, stream_name, available_ids}, _from, state) do
-    {id, new_available_ids} = next_pubsub_id(available_ids, :publisher)
-
+  def handle_call({:lease, key, available_ids, pubsub_type}, _from, state) do
+    {id, new_available_ids} = next_pubsub_id(available_ids, pubsub_type)
     :ok = Bani.Storage.update_value(key, new_available_ids)
-    {:ok, _} = Bani.ConnectionSupervisor.add_publisher(state.supervisor, stream_name, id, state.conn)
 
-    {:reply, :ok, state}
-  end
-
-  @impl true
-  def handle_call({:add_subscriber, key, stream_name, available_ids, handler}, _from, state) do
-    {id, new_available_ids} = next_pubsub_id(available_ids, :subscriber)
-
-    :ok = Bani.Storage.update_value(key, new_available_ids)
-    {:ok, _} = Bani.ConnectionSupervisor.add_subscriber(state.supervisor, stream_name, id, state.conn, handler)
-
-    {:reply, :ok, state}
+    {:reply, {state.supervisor, state.conn, id}, state}
   end
 
   defp next_pubsub_id(list, key) do

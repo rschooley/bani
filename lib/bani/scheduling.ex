@@ -8,16 +8,24 @@ defmodule Bani.Scheduling do
 
   def create_publisher(tenant, conn_opts, stream_name) do
     tenant_key = key(tenant)
-    {pid, available_ids} = available_connection_manager(tenant_key, conn_opts, :publisher)
 
-    Bani.ConnectionManager.add_publisher(pid, tenant_key, stream_name, available_ids)
+    with {pid, available_ids} <- available_connection_manager(tenant_key, conn_opts, :publisher),
+         {supervisor, conn, id} <- Bani.ConnectionManager.lease(pid, tenant_key, available_ids, :publisher),
+         {:ok, _} <- Bani.ConnectionSupervisor.add_publisher(supervisor, stream_name, id, conn)
+    do
+      :ok
+    end
   end
 
   def create_subscriber(tenant, conn_opts, stream_name, handler) do
     tenant_key = key(tenant)
-    {pid, available_ids} = available_connection_manager(tenant_key, conn_opts, :subscriber)
 
-    Bani.ConnectionManager.add_subscriber(pid, tenant_key, stream_name, available_ids, handler)
+    with {pid, available_ids} <- available_connection_manager(tenant_key, conn_opts, :subscriber),
+         {supervisor, conn, id} <- Bani.ConnectionManager.lease(pid, tenant_key, available_ids, :subscriber),
+         {:ok, _} <- Bani.ConnectionSupervisor.add_subscriber(supervisor, stream_name, id, conn, handler)
+    do
+      :ok
+    end
   end
 
   defp key(tenant) do
@@ -35,11 +43,11 @@ defmodule Bani.Scheduling do
       subscriber: Enum.to_list(0..255)
     }
 
-    with {:ok, supervisor_pid} <- Bani.ConnectionDynamicSupervisor.add_connection_supervisor(conn_opts),
-         connection_manager_pid <- Bani.ConnectionSupervisor.child_connection_manager(supervisor_pid),
-         :ok <- Bani.ConnectionManager.register(connection_manager_pid, tenant_key, available_pubsub_ids)
+    with {:ok, supervisor} <- Bani.ConnectionDynamicSupervisor.add_connection_supervisor(conn_opts),
+         connection_manager <- Bani.ConnectionSupervisor.child_connection_manager(supervisor),
+         :ok <- Bani.ConnectionManager.register(connection_manager, tenant_key, available_pubsub_ids)
     do
-      {connection_manager_pid, available_pubsub_ids}
+      {connection_manager, available_pubsub_ids}
     end
   end
 
