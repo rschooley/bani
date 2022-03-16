@@ -57,6 +57,12 @@ defmodule Bani.Broker do
   end
 
   @impl Bani.BrokerBehaviour
+  def query_publisher_sequence(conn, publisher_name, stream_name)
+      when is_pid(conn) and is_binary(publisher_name) and is_binary(stream_name) do
+    :lake.query_publisher_sequence(conn, publisher_name, stream_name)
+  end
+
+  @impl Bani.BrokerBehaviour
   def chunk_to_messages(chunk) do
     :lake.chunk_to_messages(chunk)
   end

@@ -106,9 +106,6 @@ defmodule Bani.BrokerBehaviour do
   @doc """
   Publishes to a stream synchronously.
 
-  See here for more on publishing_id:
-  https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-message-deduplication/
-
   ## Examples
 
       iex> Bani.Broker.publish(conn, 10, "message", 1)
@@ -121,6 +118,23 @@ defmodule Bani.BrokerBehaviour do
               message :: String.t(),
               publishing_id :: integer()
             ) :: :ok
+
+  @doc """
+  Queries a pubslisher's sequence (latest publishing_id).
+
+  See here for more on publishing_id:
+  https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-message-deduplication/
+
+  ## Examples
+
+    iex> Bani.Broker.query_publisher_sequence(conn, "some-publisher", "some-stream")
+    :ok
+  """
+  @callback query_publisher_sequence(
+              conn :: pid(),
+              publisher_name :: String.t(),
+              stream_name :: String.t()
+            ) :: {:ok, integer()} | {:error, term()}
 
   @callback chunk_to_messages(chunk :: term()) :: :ok | {:error, term()}
 end
