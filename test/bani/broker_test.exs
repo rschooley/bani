@@ -29,10 +29,10 @@ defmodule Bani.BrokerTest do
 
     {:ok, conn} = Broker.connect(@host, @port, @username, @password, @vhost)
     :ok = Broker.create_stream(conn, stream_name)
-    :ok = Broker.subscribe(conn, stream_name, 1)
-
     :ok = Broker.create_publisher(conn, stream_name, 10, "some-publisher")
-    :ok = Broker.publish(conn, 10, message, 1)
+    :ok = Broker.publish(conn, 10, [{0, message}])
+
+    :ok = Broker.subscribe(conn, stream_name, 1)
 
     {:ok, {[result], _other}} =
       receive do
@@ -77,5 +77,98 @@ defmodule Bani.BrokerTest do
     :ok = Broker.disconnect(conn)
   end
 
-  # TODO: offset tests
+  test "handles disconnecting while active subscriber" do
+    stream = "handles-disconnecting-while-active-subscriber"
+    subscriber_id = 1
+
+    {:ok, conn} = Broker.connect(@host, @port, @username, @password, @vhost)
+    :ok = Broker.create_stream(conn, stream)
+    :ok = Broker.subscribe(conn, stream, subscriber_id)
+
+    assert :ok = Broker.disconnect(conn)
+  end
+
+  test "handles duplicate publisher names" do
+    stream_name = "handles-duplicate-publisher-names"
+
+    {:ok, conn_1} = Broker.connect(@host, @port, @username, @password, @vhost)
+    {:ok, conn_2} = Broker.connect(@host, @port, @username, @password, @vhost)
+
+    :ok = Broker.create_stream(conn_1, stream_name)
+
+    assert :ok = Broker.create_publisher(conn_1, stream_name, 10, "the-publisher")
+
+    # same conn, same publisher_id, same publisher_name
+    assert {:error, :precondition_failed} = Broker.create_publisher(conn_1, stream_name, 10, "the-publisher")
+
+    # same conn, same publisher_id, different publisher_name
+    assert {:error, :precondition_failed} = Broker.create_publisher(conn_1, stream_name, 10, "another-publisher")
+
+    # same conn, different publisher_id, same publisher_name
+    assert {:error, :precondition_failed} = Broker.create_publisher(conn_1, stream_name, 11, "the-publisher")
+
+    # different conn, same publisher_id, same publisher_name
+    assert :ok = Broker.create_publisher(conn_2, stream_name, 10, "the-publisher")
+
+    :ok = Broker.delete_publisher(conn_1, 10)
+    :ok = Broker.delete_publisher(conn_2, 10)
+    :ok = Broker.delete_stream(conn_1, stream_name)
+    :ok = Broker.disconnect(conn_1)
+  end
+
+  test "prevents deleting a publisher from a different conn" do
+    stream_name = "delete-a-publisher-from-a-different-conn"
+
+    {:ok, conn_1} = Broker.connect(@host, @port, @username, @password, @vhost)
+    {:ok, conn_2} = Broker.connect(@host, @port, @username, @password, @vhost)
+    :ok = Broker.create_stream(conn_1, stream_name)
+
+    assert :ok = Broker.create_publisher(conn_1, stream_name, 10, "the-publisher")
+
+    assert {:error, :publisher_does_not_exist} = Broker.delete_publisher(conn_2, 10)
+    assert :ok = Broker.delete_publisher(conn_1, 10)
+
+    :ok = Broker.delete_stream(conn_1, stream_name)
+    :ok = Broker.disconnect(conn_1)
+  end
+
+  test "queries publisher sequence" do
+    stream_name = "queries-publisher-sequence"
+    publisher_name = "publisher-queries-publisher-sequence"
+
+    {:ok, conn_1} = Broker.connect(@host, @port, @username, @password, @vhost)
+    {:ok, conn_2} = Broker.connect(@host, @port, @username, @password, @vhost)
+
+    :ok = Broker.create_stream(conn_1, stream_name)
+    :ok = Broker.create_publisher(conn_1, stream_name, 10, publisher_name)
+
+    assert {:ok, 0} = Broker.query_publisher_sequence(conn_1, publisher_name, stream_name)
+    :ok = Broker.publish(conn_1, 10, [{1, "some message 1"}])
+    :ok = Broker.publish(conn_1, 10, [{2, "some message 2"}])
+    assert {:ok, 2} = Broker.query_publisher_sequence(conn_1, publisher_name, stream_name)
+
+    # the publisher_name is cross conns
+    assert {:ok, 2} = Broker.query_publisher_sequence(conn_2, publisher_name, stream_name)
+
+    :ok = Broker.delete_publisher(conn_1, 10)
+    :ok = Broker.delete_stream(conn_1, stream_name)
+    :ok = Broker.disconnect(conn_2)
+    :ok = Broker.disconnect(conn_1)
+  end
+
+  test "queries subscriber offset" do
+    stream_name = "queries-subscriber-offset"
+    subscriber_name = "subscriber-name"
+
+    {:ok, conn} = Broker.connect(@host, @port, @username, @password, @vhost)
+    :ok = Broker.create_stream(conn, stream_name)
+
+    {:ok, 0} = Broker.query_offset(conn, subscriber_name, stream_name)
+    :ok = Broker.store_offset(conn, subscriber_name, stream_name, 10)
+    {:ok, 10} = Broker.query_offset(conn, subscriber_name, stream_name)
+
+    :ok = Broker.delete_stream(conn, stream_name)
+    # this raises an error in rabbit
+    # :ok = Broker.disconnect(conn)
+  end
 end

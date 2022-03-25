@@ -4,23 +4,39 @@ defmodule Bani.Publisher do
   # Client
 
   def start_link(opts) do
-    init_state = %{
+    state = %{
       broker: Keyword.get(opts, :broker, Bani.Broker),
       conn: Keyword.fetch!(opts, :conn),
       publisher_id: Keyword.fetch!(opts, :publisher_id),
-      publishing_id: Keyword.get(opts, :publishing_id, 0),
-      stream_name: Keyword.fetch!(opts, :stream_name)
+      stream_name: Keyword.fetch!(opts, :stream_name),
+      tenant: Keyword.fetch!(opts, :tenant)
     }
 
-    GenServer.start_link(__MODULE__, init_state, name: via_tuple(init_state.stream_name))
+    GenServer.start_link(__MODULE__, state, name: via_tuple(state.tenant, state.stream_name))
   end
 
-  def publish_sync(stream_name, message) do
-    GenServer.call(via_tuple(stream_name), {:publish_sync, message})
+  def add_publisher(tenant, stream_name) do
+    GenServer.call(via_tuple(tenant, stream_name), :add_publisher)
   end
 
-  defp via_tuple(stream_name) do
-    name = "#{stream_name}-publisher"
+  def create_publisher(tenant, stream_name) do
+    GenServer.call(via_tuple(tenant, stream_name), :create_publisher)
+  end
+
+  def publish_sync(tenant, stream_name, messages) when is_binary(tenant) and is_binary(stream_name) and is_list(messages) do
+    GenServer.call(via_tuple(tenant, stream_name), {:publish_sync, messages})
+  end
+
+  def publish_sync(tenant, stream_name, message) when is_binary(tenant) and is_binary(stream_name) and is_binary(message) do
+    publish_sync(tenant, stream_name, [message])
+  end
+
+  def delete_publisher(tenant, stream_name) do
+    GenServer.call(via_tuple(tenant, stream_name), :delete_publisher)
+  end
+
+  defp via_tuple(tenant, stream_name) do
+    name = "#{tenant}/#{stream_name}-publisher"
 
     {:via, Registry, {Bani.Registry, name}}
   end
@@ -28,15 +44,28 @@ defmodule Bani.Publisher do
   # Server (callbacks)
 
   @impl true
-  def init(init_state) do
-    publisher_name = "#{init_state.stream_name}-publisher-#{init_state.publisher_id}"
-    state = Map.merge(init_state, %{publisher_name: publisher_name})
+  def init(state) do
+    publisher_name = Bani.KeyRing.publisher_name(state.tenant, state.stream_name)
+    new_state = Map.put(state, :publisher_name, publisher_name)
 
-    {:ok, state, {:continue, :create_publisher}}
+    {:ok, new_state}
   end
 
   @impl true
-  def handle_continue(:create_publisher, state) do
+  def handle_call(:add_publisher, _from, state) do
+    {:ok, publishing_id} = state.broker.query_publisher_sequence(
+      state.conn,
+      state.publisher_name,
+      state.stream_name
+    )
+
+    new_state = Map.put(state, :publishing_id, publishing_id)
+
+    {:reply, :ok, new_state}
+  end
+
+  @impl true
+  def handle_call(:create_publisher, from, state) do
     :ok = state.broker.create_publisher(
       state.conn,
       state.stream_name,
@@ -44,22 +73,28 @@ defmodule Bani.Publisher do
       state.publisher_name
     )
 
-    pid = self()
-    ref = make_ref()
-    spawn_link(fn -> monitor_for_cleanup(pid, ref, {state.broker, state.conn, state.publisher_id}) end)
-
-    receive do
-      {^ref, :ready} -> :ok
-    end
-
-    {:noreply, state}
+    handle_call(:add_publisher, from, state)
   end
 
   @impl true
-  def handle_call({:publish_sync, message}, _from, state) do
-    :ok = state.broker.publish(state.conn, state.publisher_id, message, state.publishing_id)
+  def handle_call({:publish_sync, messages}, _from, state) do
+    message_count = Enum.count(messages)
+    payload = Enum.zip(state.publishing_id..message_count, messages)
 
-    state = %{state | publishing_id: state.publishing_id + 1}
+    :ok = state.broker.publish(
+      state.conn,
+      state.publisher_id,
+      payload
+    )
+
+    new_state = Map.put(state, :publishing_id, state.publishing_id + message_count)
+
+    {:reply, :ok, new_state}
+  end
+
+  @impl true
+  def handle_call(:delete_publisher, _from, state) do
+    :ok = state.broker.delete_publisher(state.conn, state.publisher_id)
 
     {:reply, :ok, state}
   end
@@ -68,15 +103,5 @@ defmodule Bani.Publisher do
   def handle_info({:metadata_update, _, _stream_name}, state) do
     # TODO: handle these messages
     {:noreply, state}
-  end
-
-  defp monitor_for_cleanup(pid, ref, {broker, conn, publisher_id}) do
-    Process.flag(:trap_exit, true)
-    send(pid, {ref, :ready})
-
-    receive do
-      {:EXIT, ^pid, _reason} ->
-        :ok = broker.delete_publisher(conn, publisher_id)
-    end
   end
 end

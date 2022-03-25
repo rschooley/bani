@@ -4,40 +4,57 @@ defmodule Bani.Subscriber do
   # Client
 
   def start_link(opts) do
-    init_state = %{
+    state = %{
       broker: Keyword.get(opts, :broker, Bani.Broker),
       conn: Keyword.fetch!(opts, :conn),
       handler: Keyword.fetch!(opts, :handler),
       message_processor: Keyword.get(opts, :message_processor, Bani.MessageProcessor),
-      offset: Keyword.get(opts, :offset, 0),
       stream_name: Keyword.fetch!(opts, :stream_name),
-      subscription_id: Keyword.fetch!(opts, :subscription_id)
+      subscription_id: Keyword.fetch!(opts, :subscription_id),
+      subscription_name: Keyword.fetch!(opts, :subscription_name),
+      tenant: Keyword.fetch!(opts, :tenant)
     }
 
-    GenServer.start_link(__MODULE__, init_state)
+    GenServer.start_link(__MODULE__, state, name: via_tuple(state.tenant, state.stream_name, state.subscription_name))
+  end
+
+  def delete_subscriber(tenant, stream_name, subscription_name) do
+    GenServer.call(via_tuple(tenant, stream_name, subscription_name), :delete_subscriber)
+  end
+
+  defp via_tuple(tenant, stream_name, subscription_name) do
+    name = Bani.KeyRing.subscriber_name(tenant, stream_name, subscription_name)
+
+    {:via, Registry, {Bani.Registry, name}}
   end
 
   # Server (callbacks)
 
   @impl true
-  def init(init_state) do
-    state = Map.merge(init_state, %{poisoned: false, acc: nil})
-
-    {:ok, state, {:continue, :subscribe}}
+  def init(state) do
+    {:ok, state, {:continue, :create_subscriber}}
   end
 
   @impl true
-  def handle_continue(:subscribe, state) do
+  def handle_continue(:create_subscriber, state) do
+    offset = Bani.SubscriberStorage.offset(state.tenant, state.stream_name, state.subscription_name)
+
+    # subscriptions are per conn per subscription id
+    # conns don't reconnect
+    # if a ConnectionManager restarts there is a new conn
+    # so we create new subscriptions in rabbit on genserver init
     :ok = state.broker.subscribe(
       state.conn,
       state.stream_name,
       state.subscription_id,
-      state.offset
+      offset
     )
 
     pid = self()
     ref = make_ref()
-    spawn_link(fn -> monitor_for_cleanup(pid, ref, {state.broker, state.conn, state.subscription_id}) end)
+
+    spawn_link(fn -> monitor_for_cleanup(pid, ref, {state.broker, state.conn, state.subscription_id})
+    end)
 
     receive do
       {^ref, :ready} -> :ok
@@ -47,27 +64,46 @@ defmodule Bani.Subscriber do
   end
 
   @impl true
+  def handle_call(:delete_subscriber, _from, state) do
+    :ok = state.broker.unsubscribe(state.conn, state.subscription_id)
+
+    {:reply, :ok, state}
+  end
+
+  @impl true
   def handle_info({:deliver, _response_code, chunk}, state) do
-    processed = state.message_processor.process(
+    acc = Bani.SubscriberStorage.acc(state.tenant, state.stream_name, state.subscription_name)
+
+    result = state.message_processor.process(
       &state.broker.chunk_to_messages/1,
       state.handler,
       chunk,
-      state.acc
+      acc
     )
 
-    case processed do
-      {:ok, result} ->
-        new_state =
-          state
-          |> Map.put(:offset, state.offset + 1)
-          |> Map.put(:acc, result)
+    case result do
+      {:ok, new_acc} ->
+        # TODO: multiple messages & offset inc
+        Bani.SubscriberStorage.update(
+          state.tenant,
+          state.stream_name,
+          state.subscription_name,
+          1,
+          new_acc
+        )
 
-        {:noreply, new_state}
+        {:noreply, state}
 
-      {:error, _} ->
-        new_state = Map.put(state, :poisoned, true)
+      {:error, err} ->
+        # TODO: should this unsubscribe from the broker
+        Bani.SubscriberStorage.poison(
+          state.tenant,
+          state.stream_name,
+          state.subscription_name,
+          err
+        )
 
-        {:noreply, new_state}
+        {:noreply, state}
     end
   end
 
@@ -83,7 +119,15 @@ defmodule Bani.Subscriber do
 
     receive do
       {:EXIT, ^pid, _reason} ->
-        :ok = broker.unsubscribe(conn, subscription_id)
+        # two most probable reasons for an exit
+        # 1) the conn dropped and the ConnectionSupervisor subtree is restarting
+        #    in that case the conn is dead, but that will remove the sub in rabbit
+        # 2) this genserver alone is crashing
+        #    in that case the conn is alive, we'll remove the existing sub and recreate on init
+        if (Process.alive?(conn)) do
+          # if this fails the init will fail and cascade crash the supervisor resetting the conn
+          :ok = broker.unsubscribe(conn, subscription_id)
+        end
     end
   end
 end
