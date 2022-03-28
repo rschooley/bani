@@ -18,10 +18,6 @@ defmodule Bani.Subscriber do
     GenServer.start_link(__MODULE__, state, name: via_tuple(state.tenant, state.stream_name, state.subscription_name))
   end
 
-  def delete_subscriber(tenant, stream_name, subscription_name) do
-    GenServer.call(via_tuple(tenant, stream_name, subscription_name), :delete_subscriber)
-  end
-
   defp via_tuple(tenant, stream_name, subscription_name) do
     name = Bani.KeyRing.subscriber_name(tenant, stream_name, subscription_name)
 
@@ -61,13 +57,6 @@ defmodule Bani.Subscriber do
     end
 
     {:noreply, state}
-  end
-
-  @impl true
-  def handle_call(:delete_subscriber, _from, state) do
-    :ok = state.broker.unsubscribe(state.conn, state.subscription_id)
-
-    {:reply, :ok, state}
   end
 
   @impl true

@@ -139,40 +139,5 @@ defmodule Bani.BrokerBehaviour do
               stream_name :: String.t()
             ) :: {:ok, integer()} | {:error, term()}
 
-  @doc """
-  Stores a subscribers's offset.
-
-  See here for more on storing offsets:
-  https://blog.rabbitmq.com/posts/2021/09/rabbitmq-streams-offset-tracking/
-
-  ## Examples
-
-    iex> Bani.Broker.store_offset(conn, "some-subscriber", "some-stream", 10)
-    :ok
-  """
-  @callback store_offset(
-              conn :: pid(),
-              subscriber_name :: String.t(),
-              stream_name :: String.t(),
-              offset :: integer()
-            ) :: {:ok, integer()} | {:error, term()}
-
-  @doc """
-  Queries a subscribers's offset.
-
-  See here for more on storing offsets:
-  https://blog.rabbitmq.com/posts/2021/09/rabbitmq-streams-offset-tracking/
-
-  ## Examples
-
-    iex> Bani.Broker.query_offset(conn, "some-subscriber", "some-stream")
-    :ok
-  """
-  @callback query_offset(
-              conn :: pid(),
-              subscriber_name :: String.t(),
-              stream_name :: String.t()
-            ) :: {:ok, integer()} | {:error, term()}
-
   @callback chunk_to_messages(chunk :: term()) :: :ok | {:error, term()}
 end

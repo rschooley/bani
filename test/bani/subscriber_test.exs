@@ -45,58 +45,15 @@ defmodule Bani.SubscriberTest do
   end
 
   test "cleans up on exit" do
-    # TODO:
-    # ** (Mox.UnexpectedCallError) no expectation defined for Bani.MockBroker.subscribe/4
-    # in process #PID<0.241.0> with args [#PID<0.238.0>, "subscriber-cleans-up-on-exit", 10, 0]
-    #   (mox 1.0.1) lib/mox.ex:741: Mox.__dispatch__/4
-
-    # test_pid = self()
-    # ref = make_ref()
-
-    # conn = self()
-    # handler = fn (_prev, curr) -> {:ok, curr} end
-    # stream_name = "subscriber-cleans-up-on-exit"
-    # subscription_id = 10
-    # subscription_name = "subscriber-cleans-up-on-exit-sink"
-    # tenant = "tenant-123"
-
-    # opts = [
-    #   broker: Bani.MockBroker,
-    #   conn: conn,
-    #   handler: handler,
-    #   stream_name: stream_name,
-    #   subscription_id: subscription_id,
-    #   subscription_name: subscription_name,
-    #   tenant: tenant
-    # ]
-
-    # expect(Bani.MockBroker, :unsubscribe, fn (conn_, subscription_id_) ->
-    #   assert conn_ == conn
-    #   assert subscription_id_ == subscription_id
-
-    #   Process.send(test_pid, {:expect_called, ref}, [])
-
-    #   :ok
-    # end)
-
-    # start_subscriber_storage!(opts)
-    # {:ok, pid} = start_supervised({Bani.Subscriber, opts})
-    # :ok = GenServer.stop(pid)
-
-    # assert_receive {:expect_called, ^ref}
-  end
-
-  test "handles delete_subscriber" do
     test_pid = self()
     ref = make_ref()
 
     conn = self()
     handler = fn (_prev, curr) -> {:ok, curr} end
-    stream_name = "subscriber-deletes-subscriber"
+    stream_name = "subscriber-cleans-up-on-exit"
     subscription_id = 10
-    subscription_name = "subscriber-deletes-subscriber-sink"
+    subscription_name = "subscriber-cleans-up-on-exit-sink"
     tenant = "tenant-123"
-    offset = 10
 
     opts = [
       broker: Bani.MockBroker,
@@ -119,10 +76,10 @@ defmodule Bani.SubscriberTest do
       :ok
     end)
 
-    start_subscriber_storage!(opts, offset)
-    start_supervised!({Bani.Subscriber, opts})
+    start_subscriber_storage!(opts)
+    {:ok, pid} = start_supervised({Bani.Subscriber, opts})
+    :ok = GenServer.stop(pid)
 
-    assert :ok = Bani.Subscriber.delete_subscriber(tenant, stream_name, subscription_name)
     assert_receive {:expect_called, ^ref}
   end
 

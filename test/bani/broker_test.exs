@@ -156,19 +156,25 @@ defmodule Bani.BrokerTest do
     :ok = Broker.disconnect(conn_1)
   end
 
-  test "queries subscriber offset" do
-    stream_name = "queries-subscriber-offset"
-    subscriber_name = "subscriber-name"
+  test "queries publisher sequence after publisher deleted" do
+    stream_name = "queries-publisher-sequence-after-publisher-deleted"
+    publisher_name = "publisher-queries-publisher-sequence-after-publisher-deleted"
 
     {:ok, conn} = Broker.connect(@host, @port, @username, @password, @vhost)
+
     :ok = Broker.create_stream(conn, stream_name)
+    :ok = Broker.create_publisher(conn, stream_name, 10, publisher_name)
+    {:ok, 0} = Broker.query_publisher_sequence(conn, publisher_name, stream_name)
 
-    {:ok, 0} = Broker.query_offset(conn, subscriber_name, stream_name)
-    :ok = Broker.store_offset(conn, subscriber_name, stream_name, 10)
-    {:ok, 10} = Broker.query_offset(conn, subscriber_name, stream_name)
+    :ok = Broker.publish(conn, 10, [{1, "some message 1"}])
+    assert {:ok, 1} = Broker.query_publisher_sequence(conn, publisher_name, stream_name)
 
+    :ok = Broker.delete_publisher(conn, 10)
+    :ok = Broker.create_publisher(conn, stream_name, 11, publisher_name)
+    assert {:ok, 1} = Broker.query_publisher_sequence(conn, publisher_name, stream_name)
+
+    :ok = Broker.delete_publisher(conn, 11)
     :ok = Broker.delete_stream(conn, stream_name)
-    # this raises an error in rabbit
-    # :ok = Broker.disconnect(conn)
+    :ok = Broker.disconnect(conn)
   end
 end

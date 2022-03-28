@@ -61,26 +61,6 @@ defmodule Bani.Broker do
     :lake.query_publisher_sequence(conn, publisher_name, stream_name)
   end
 
-  # not current used
-  @impl Bani.BrokerBehaviour
-  def store_offset(conn, subscriber_name, stream_name, offset)
-      when is_pid(conn) and is_binary(subscriber_name) and is_binary(stream_name) and is_integer(offset) do
-    :lake.store_offset(conn, subscriber_name, stream_name, offset)
-  end
-
-  # not current used
-  @impl Bani.BrokerBehaviour
-  def query_offset(conn, subscriber_name, stream_name)
-      when is_pid(conn) and is_binary(subscriber_name) and is_binary(stream_name) do
-    # querying before storing by the name raises an exeption in lae
-    try do
-      :lake.query_offset(conn, subscriber_name, stream_name)
-    rescue
-      _e ->
-        {:ok, 0}
-    end
-  end
-
   @impl Bani.BrokerBehaviour
   def chunk_to_messages(chunk) do
     :lake.chunk_to_messages(chunk)

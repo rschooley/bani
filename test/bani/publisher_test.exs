@@ -6,28 +6,11 @@ defmodule Bani.PublisherTest do
   setup [:set_mox_global, :verify_on_exit!]
 
   test "initializes" do
-    tenant = "tenant-1"
-    stream_name = "publisher-initializes"
-    conn = self()
-    publisher_id = 0
-
-    opts = [
-      broker: Bani.MockBroker,
-      conn: conn,
-      stream_name: stream_name,
-      publisher_id: publisher_id,
-      tenant: tenant
-    ]
-
-    assert {:ok, _} = start_supervised({Bani.Publisher, opts})
-  end
-
-  test "handles create_publisher" do
     test_pid = self()
     ref = make_ref()
 
     tenant = "tenant-1"
-    stream_name = "publisher-calls-create_publisher"
+    stream_name = "publisher-initializes"
     conn = self()
     publisher_id = 0
 
@@ -60,22 +43,20 @@ defmodule Bani.PublisherTest do
       {:ok, 0}
     end)
 
-    start_supervised!({Bani.Publisher, opts})
-
-    assert :ok = Bani.Publisher.create_publisher(tenant, stream_name)
+    assert {:ok, _} = start_supervised({Bani.Publisher, opts})
 
     assert_receive {:expect_create_publisher_called, ^ref}
     assert_receive {:expect_query_publisher_sequence_called, ^ref}
   end
 
-  test "handles delete_publisher" do
+  test "cleans up on exit" do
     test_pid = self()
     ref = make_ref()
 
-    tenant = "tenant-1"
-    stream_name = "publisher-delete-publisher"
     conn = self()
+    stream_name = "publisher-cleans-up-on-exit"
     publisher_id = 1
+    tenant = "tenant-123"
 
     opts = [
       broker: Bani.MockBroker,
@@ -84,6 +65,9 @@ defmodule Bani.PublisherTest do
       publisher_id: publisher_id,
       tenant: tenant
     ]
+
+    stub(Bani.MockBroker, :create_publisher, fn (_, _, _, _) -> :ok end)
+    stub(Bani.MockBroker, :query_publisher_sequence, fn (_, _, _) -> {:ok, 1} end)
 
     expect(Bani.MockBroker, :delete_publisher, fn (conn_, publisher_id_) ->
       assert conn_ == conn
@@ -94,9 +78,8 @@ defmodule Bani.PublisherTest do
       :ok
     end)
 
-    start_supervised!({Bani.Publisher, opts})
-
-    Bani.Publisher.delete_publisher(tenant, stream_name)
+    {:ok, pid} = start_supervised({Bani.Publisher, opts})
+    :ok = GenServer.stop(pid)
 
     assert_receive {:expect_called, ^ref}
   end
@@ -134,7 +117,6 @@ defmodule Bani.PublisherTest do
 
     pid = start_supervised!({Bani.Publisher, opts})
 
-    assert :ok = Bani.Publisher.create_publisher(tenant, stream_name)
     assert :ok = Bani.Publisher.publish_sync(tenant, stream_name, message)
     assert_receive {:expect_called, ^ref}
     assert get_publishing_id(pid) == 1
@@ -174,7 +156,6 @@ defmodule Bani.PublisherTest do
 
     pid = start_supervised!({Bani.Publisher, opts})
 
-    assert :ok = Bani.Publisher.create_publisher(tenant, stream_name)
     assert :ok = Bani.Publisher.publish_sync(tenant, stream_name, [message_1, message_2])
     assert_receive {:expect_called, ^ref}
     assert get_publishing_id(pid) == 2

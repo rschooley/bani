@@ -49,26 +49,25 @@ defmodule Bani.ConnectionManagerTest do
   end
 
   test "cleans up on exit", %{valid_opts: valid_opts} do
-    # TODO: pending
-    # raise "pending"
+    test_pid = self()
+    ref = make_ref()
 
-    # test_pid = self()
-    # ref = make_ref()
-    # conn = self()
+    conn = self()
 
-    # stub(Bani.MockBroker, :connect, fn (_, _, _, _, _) -> {:ok, conn} end)
+    stub(Bani.MockBroker, :connect, fn (_, _, _, _, _) -> {:ok, conn} end)
 
-    # expect(Bani.MockBroker, :disconnect, fn (conn_) ->
-    #   assert conn_ == conn
+    expect(Bani.MockBroker, :disconnect, fn (conn_) ->
+      assert conn_ == conn
 
-    #   Process.send(test_pid, {:expect_called, ref}, [])
+      Process.send(test_pid, {:expect_called, ref}, [])
 
-    #   :ok
-    # end)
+      :ok
+    end)
 
-    # start_supervised!({Bani.ConnectionManager, valid_opts})
+    {:ok, pid} = start_supervised({Bani.ConnectionManager, valid_opts})
+    :ok = GenServer.stop(pid)
 
-    # assert_receive {:expect_called, ^ref}
+    assert_receive {:expect_called, ^ref}
   end
 
   test "returns conn", %{valid_opts: valid_opts} do
