@@ -1,6 +1,10 @@
 defmodule Bani.KeyRing do
-  def connection_name(tenant, connection_id) do
-    "tenants/#{tenant}/connections/#{connection_id}"
+  def connection_name(connection_id) do
+    "connections/#{connection_id}"
+  end
+
+  def connection_manager_name(connection_id) do
+    "connections/#{connection_id}/connection_manager"
   end
 
   def publisher_name(tenant, stream_name) do
@@ -13,5 +17,9 @@ defmodule Bani.KeyRing do
 
   def subscriber_name(tenant, stream_name, subscription_name) do
     "tenants/#{tenant}/streams/#{stream_name}/subscribers/#{subscription_name}"
+  end
+
+  def tenant_name(tenant) do
+    "tenants/#{tenant}"
   end
 end

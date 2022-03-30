@@ -3,54 +3,62 @@ defmodule Bani.ConnectionSupervisor do
 
   # client
 
-  def start_link(conn_opts) do
-    Supervisor.start_link(__MODULE__, conn_opts)
+  def start_link(opts) do
+    Supervisor.start_link(__MODULE__, opts)
   end
 
-  def add_publisher(pid, stream_name, publisher_id, conn) do
-    publisher_supervisor = child_publisher_supervisor(pid)
+  def add_publisher(connection_id, tenant, stream_name, publisher_id) do
+    publisher_supervisor = child_publisher_supervisor(connection_id)
 
-    DynamicSupervisor.start_child(
+    {:ok, _} = DynamicSupervisor.start_child(
       publisher_supervisor,
-      {Bani.Publisher, [conn: conn, stream_name: stream_name, publisher_id: publisher_id]}
+      {Bani.Publisher, [
+        connection_id: connection_id,
+        publisher_id: publisher_id,
+        stream_name: stream_name,
+        tenant: tenant
+      ]}
     )
   end
 
-  def add_subscriber(pid, stream_name, subscription_id, conn, handler) do
-    subscriber_supervisor = child_subscriber_supervisor(pid)
+  def add_subscriber(connection_id, tenant, stream_name, subscription_id, subscription_name, handler) do
+    subscriber_supervisor = child_subscriber_supervisor(connection_id)
 
     DynamicSupervisor.start_child(
       subscriber_supervisor,
-      {Bani.Subscriber, [conn: conn, stream_name: stream_name, subscription_id: subscription_id, handler: handler]}
+      {Bani.Subscriber, [
+        connection_id: connection_id,
+        handler: handler,
+        stream_name: stream_name,
+        subscription_id: subscription_id,
+        subscription_name: subscription_name,
+        tenant: tenant
+      ]}
     )
   end
 
-  def child_connection_manager(pid) do
-    pid
-    |> children()
+  def child_connection_manager(connection_id) do
+    children(connection_id)
     |> Keyword.get(Bani.ConnectionManager)
   end
 
-  def child_conn(pid) do
-    pid
-    |> child_connection_manager()
+  def child_conn(connection_id) do
+    child_connection_manager(connection_id)
     |> Bani.ConnectionManager.conn()
   end
 
-  defp child_publisher_supervisor(pid) do
-    pid
-    |> children()
+  defp child_publisher_supervisor(connection_id) do
+    children(connection_id)
     |> Keyword.get(Bani.PublisherSupervisor)
   end
 
-  defp child_subscriber_supervisor(pid) do
-    pid
-    |> children()
-    |> Keyword.get(Bani.SubscriberSupervisor)
+  defp child_subscriber_supervisor(connection_id) do
+    children(connection_id)
+    |> Keyword.get(Bani.PublSubscriberSupervisorisherSupervisor)
   end
 
-  defp children(pid) do
-    pid
+  defp children(connection_id) do
+    via_tuple(connection_id)
     |> Supervisor.which_children()
     |> Enum.map(fn ({type, child_pid, _, _}) -> {type, child_pid} end)
   end
@@ -58,15 +66,21 @@ defmodule Bani.ConnectionSupervisor do
   # server
 
   @impl true
-  def init(conn_opts) do
-    connection_manager_opts = Keyword.put(conn_opts, :supervisor, self())
-
+  def init(opts) do
     children = [
-      {Bani.ConnectionManager, connection_manager_opts},
+      {Bani.ConnectionManager, opts},
       {Bani.PublisherSupervisor, []},
       {Bani.SubscriberSupervisor, []}
     ]
 
-    Supervisor.init(children, strategy: :one_for_all)
+    connection_id = Keyword.fetch!(opts, :connection_id)
+
+    Supervisor.init(children, strategy: :one_for_all, name: via_tuple(connection_id))
+  end
+
+  defp via_tuple(connection_id) do
+    name = Bani.KeyRing.connection_name(connection_id)
+
+    {:via, Registry, {Bani.Registry, name}}
   end
 end

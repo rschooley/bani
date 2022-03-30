@@ -1,16 +1,16 @@
-defmodule Bani.SchedulerDynamicSupervisor do
+defmodule Bani.ConnectionDynamicSupervisor do
   use DynamicSupervisor
 
   def start_link(init_arg) do
     DynamicSupervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
   end
 
-  def add_scheduler(tenant, conn_opts) do
-    opts = [tenant: tenant, conn_opts: conn_opts]
+  def add_connection_supervisor(conn_opts, connection_id) do
+    opts = Keyword.put(conn_opts, :connection_id, connection_id)
 
     DynamicSupervisor.start_child(
       __MODULE__,
-      {Bani.Scheduler, opts}
+      {Bani.ConnectionSupervisor, opts}
     )
   end
 

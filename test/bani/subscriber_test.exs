@@ -5,11 +5,19 @@ defmodule Bani.SubscriberTest do
 
   setup [:set_mox_global, :verify_on_exit!]
 
-  test "initializes" do
+  setup do
+    conn = self()
+    connection_id = "some-connection-id"
+
+    stub(Bani.MockConnectionManager, :conn, fn (_) -> conn end)
+
+    {:ok, %{conn: conn, connection_id: connection_id}}
+  end
+
+  test "initializes", %{conn: conn, connection_id: connection_id} do
     test_pid = self()
     ref = make_ref()
 
-    conn = self()
     handler = fn (_prev, curr) -> {:ok, curr} end
     stream_name = "subscriber-initializes"
     subscription_id = 10
@@ -19,7 +27,8 @@ defmodule Bani.SubscriberTest do
 
     opts = [
       broker: Bani.MockBroker,
-      conn: conn,
+      connection_manager: Bani.MockConnectionManager,
+      connection_id: connection_id,
       handler: handler,
       stream_name: stream_name,
       subscription_id: subscription_id,
@@ -44,11 +53,10 @@ defmodule Bani.SubscriberTest do
     assert_receive {:expect_called, ^ref}
   end
 
-  test "cleans up on exit" do
+  test "cleans up on exit", %{conn: conn, connection_id: connection_id} do
     test_pid = self()
     ref = make_ref()
 
-    conn = self()
     handler = fn (_prev, curr) -> {:ok, curr} end
     stream_name = "subscriber-cleans-up-on-exit"
     subscription_id = 10
@@ -57,7 +65,8 @@ defmodule Bani.SubscriberTest do
 
     opts = [
       broker: Bani.MockBroker,
-      conn: conn,
+      connection_manager: Bani.MockConnectionManager,
+      connection_id: connection_id,
       handler: handler,
       stream_name: stream_name,
       subscription_id: subscription_id,
@@ -83,11 +92,10 @@ defmodule Bani.SubscriberTest do
     assert_receive {:expect_called, ^ref}
   end
 
-  test "handles message delivery" do
+  test "handles message delivery", %{connection_id: connection_id} do
     test_pid = self()
     ref = make_ref()
 
-    conn = self()
     handler = fn (_prev, curr) -> {:ok, curr} end
     stream_name = "subscriber-handles-message-delivery"
     subscription_id = 10
@@ -99,7 +107,8 @@ defmodule Bani.SubscriberTest do
 
     opts = [
       broker: Bani.MockBroker,
-      conn: conn,
+      connection_manager: Bani.MockConnectionManager,
+      connection_id: connection_id,
       handler: handler,
       message_processor: Bani.MockMessageProcessor,
       stream_name: stream_name,
@@ -130,8 +139,7 @@ defmodule Bani.SubscriberTest do
     assert_receive {:expect_called, ^ref}
   end
 
-  test "updates state on deliver success" do
-    conn = self()
+  test "updates state on deliver success", %{connection_id: connection_id} do
     handler = fn (_prev, curr) -> {:ok, curr} end
     stream_name = "subscriber-updates-state-on-deliver-success"
     subscription_id = 10
@@ -144,7 +152,8 @@ defmodule Bani.SubscriberTest do
 
     opts = [
       broker: Bani.MockBroker,
-      conn: conn,
+      connection_manager: Bani.MockConnectionManager,
+      connection_id: connection_id,
       handler: handler,
       message_processor: Bani.MockMessageProcessor,
       stream_name: stream_name,
@@ -170,8 +179,7 @@ defmodule Bani.SubscriberTest do
     end)
   end
 
-  test "updates state on deliver error" do
-    conn = self()
+  test "updates state on deliver error", %{connection_id: connection_id} do
     handler = fn (_prev, curr) -> {:ok, curr} end
     stream_name = "subscriber-updates-state-on-deliver-error"
     subscription_id = 10
@@ -184,7 +192,8 @@ defmodule Bani.SubscriberTest do
 
     opts = [
       broker: Bani.MockBroker,
-      conn: conn,
+      connection_manager: Bani.MockConnectionManager,
+      connection_id: connection_id,
       handler: handler,
       message_processor: Bani.MockMessageProcessor,
       stream_name: stream_name,

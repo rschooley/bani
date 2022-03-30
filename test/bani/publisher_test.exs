@@ -5,18 +5,27 @@ defmodule Bani.PublisherTest do
 
   setup [:set_mox_global, :verify_on_exit!]
 
-  test "initializes" do
+  setup do
+    conn = self()
+    connection_id = "some-connection-id"
+
+    stub(Bani.MockConnectionManager, :conn, fn (_) -> conn end)
+
+    {:ok, %{conn: conn, connection_id: connection_id}}
+  end
+
+  test "initializes", %{conn: conn, connection_id: connection_id} do
     test_pid = self()
     ref = make_ref()
 
     tenant = "tenant-1"
     stream_name = "publisher-initializes"
-    conn = self()
     publisher_id = 0
 
     opts = [
       broker: Bani.MockBroker,
-      conn: conn,
+      connection_manager: Bani.MockConnectionManager,
+      connection_id: connection_id,
       stream_name: stream_name,
       publisher_id: publisher_id,
       tenant: tenant
@@ -49,18 +58,18 @@ defmodule Bani.PublisherTest do
     assert_receive {:expect_query_publisher_sequence_called, ^ref}
   end
 
-  test "cleans up on exit" do
+  test "cleans up on exit", %{conn: conn, connection_id: connection_id} do
     test_pid = self()
     ref = make_ref()
 
-    conn = self()
     stream_name = "publisher-cleans-up-on-exit"
     publisher_id = 1
     tenant = "tenant-123"
 
     opts = [
       broker: Bani.MockBroker,
-      conn: conn,
+      connection_manager: Bani.MockConnectionManager,
+      connection_id: connection_id,
       stream_name: stream_name,
       publisher_id: publisher_id,
       tenant: tenant
@@ -84,19 +93,19 @@ defmodule Bani.PublisherTest do
     assert_receive {:expect_called, ^ref}
   end
 
-  test "publishes single message" do
+  test "publishes single message",  %{conn: conn, connection_id: connection_id} do
     test_pid = self()
     ref = make_ref()
 
     tenant = "tenant-1"
     stream_name = "publisher-publishes"
-    conn = self()
     publisher_id = 0
     message = "some message"
 
     opts = [
       broker: Bani.MockBroker,
-      conn: conn,
+      connection_manager: Bani.MockConnectionManager,
+      connection_id: connection_id,
       stream_name: stream_name,
       publisher_id: publisher_id,
       tenant: tenant
@@ -122,20 +131,20 @@ defmodule Bani.PublisherTest do
     assert get_publishing_id(pid) == 1
   end
 
-  test "publishes list of messages" do
+  test "publishes list of messages",  %{conn: conn, connection_id: connection_id} do
     test_pid = self()
     ref = make_ref()
 
     tenant = "tenant-1"
     stream_name = "publisher-publishes-list-of-messages"
-    conn = self()
     publisher_id = 0
     message_1 = "some message 1"
     message_2 = "some message 2"
 
     opts = [
       broker: Bani.MockBroker,
-      conn: conn,
+      connection_manager: Bani.MockConnectionManager,
+      connection_id: connection_id,
       stream_name: stream_name,
       publisher_id: publisher_id,
       tenant: tenant

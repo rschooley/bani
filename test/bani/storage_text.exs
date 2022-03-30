@@ -9,7 +9,7 @@ defmodule Bani.StorageTest do
     assert [{self(), value}] == Bani.Storage.lookup(key)
   end
 
-  test "updates value and looksup" do
+  test "updates value and looks up" do
     key = "some key"
     value_1 = "some value"
     value_2 = "some updated value"

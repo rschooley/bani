@@ -28,7 +28,8 @@ defmodule Bani.MixProject do
   defp deps do
     [
       {:lake, "~> 0.1.2"},
-      {:mox, ">= 0.0.0", only: :test}
+      {:mox, ">= 0.0.0", only: :test},
+      {:uniq, "~> 0.4"}
     ]
   end
 end

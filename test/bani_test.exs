@@ -1,5 +1,5 @@
 defmodule BaniTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
 
   @conn_opts [
     {:host, "localhost"},
@@ -18,7 +18,7 @@ defmodule BaniTest do
     ref = make_ref()
 
     tenant = "tenant-123"
-    stream_name = "create-stream-123"
+    stream_name = "creates-stream-and-subscribes"
     message = "sample message"
 
     handler = fn (_prev, curr) ->
@@ -29,18 +29,92 @@ defmodule BaniTest do
       {:ok, curr}
     end
 
-    :ok = TestBani.add_tenant(tenant, @conn_opts)
-    :ok = TestBani.create_stream(tenant, stream_name)
-    :ok = TestBani.create_publisher(tenant, stream_name)
-    :ok = TestBani.create_subscriber(tenant, stream_name, handler)
+    TestBani.foo("log this")
 
-    :ok = TestBani.publish(tenant, stream_name, message)
+    # :ok = TestBani.add_tenant(tenant, @conn_opts)
+    # :ok = TestBani.create_stream(tenant, stream_name)
+    # :ok = TestBani.create_publisher(tenant, stream_name)
+    # # :ok = TestBani.create_subscriber(tenant, stream_name, "test-sink", handler)
 
-    assert_receive {:expect_called, ^ref}
+    # :ok = TestBani.publish(tenant, stream_name, message)
+
+    # # assert_receive {:expect_called, ^ref}
+
+    # # # :ok = TestBani.delete_subscriber(stream_name)
+    # # # :ok = TestBani.delete_publisher(tenant, stream_name)
+    # :ok = TestBani.delete_stream(tenant, stream_name)
+
+    # # # TODO: remove tenant
+    # :ok = DynamicSupervisor.stop(Bani.SchedulerDynamicSupervisor)
+  end
+
+  test "creates multiple streams and subscribtions" do
+    test_pid = self()
+    ref = make_ref()
+
+    tenant_1 = "tenant-123"
+    tenant_2 = "tenant-234"
+
+    stream_name_1 = "bani-create-multiple-stream-1"
+    stream_name_2 = "bani-create-multiple-stream-2"
+    stream_name_3 = "bani-create-multiple-stream-3"
+
+    message_1 = "tenant-123 message 1"
+    message_2 = "tenant-123 message 2"
+    message_3 = "tenant-456 message 1"
+
+    handler_1 = fn (_prev, curr) ->
+      assert curr == message_1
+      Process.send(test_pid, {:expect_handler_1_called, ref}, [])
+
+      {:ok, curr}
+    end
+
+    handler_2 = fn (_prev, curr) ->
+      assert curr == message_2
+      Process.send(test_pid, {:expect_handler_2_called, ref}, [])
+
+      {:ok, curr}
+    end
+
+    handler_3 = fn (_prev, curr) ->
+      assert curr == message_3
+      Process.send(test_pid, {:expect_handler_3_called, ref}, [])
+
+      {:ok, curr}
+    end
+
+    :ok = TestBani.add_tenant(tenant_1, @conn_opts)
+    :ok = TestBani.add_tenant(tenant_2, @conn_opts)
+
+    :ok = TestBani.create_stream(tenant_1, stream_name_1)
+    :ok = TestBani.create_stream(tenant_1, stream_name_2)
+    :ok = TestBani.create_stream(tenant_2, stream_name_3)
+
+    :ok = TestBani.create_publisher(tenant_1, stream_name_1)
+    :ok = TestBani.create_publisher(tenant_1, stream_name_2)
+    :ok = TestBani.create_publisher(tenant_2, stream_name_3)
+
+    :ok = TestBani.create_subscriber(tenant_1, stream_name_1, "test-sink", handler_1)
+    :ok = TestBani.create_subscriber(tenant_1, stream_name_2, "test-sink", handler_2)
+    :ok = TestBani.create_subscriber(tenant_2, stream_name_3, "test-sink", handler_3)
+
+    :ok = TestBani.publish(tenant_1, stream_name_1, message_1)
+    :ok = TestBani.publish(tenant_1, stream_name_2, message_2)
+    :ok = TestBani.publish(tenant_2, stream_name_3, message_3)
+
+    assert_receive {:expect_handler_1_called, ^ref}
+    assert_receive {:expect_handler_2_called, ^ref}
+    assert_receive {:expect_handler_3_called, ^ref}
 
     # :ok = TestBani.delete_subscriber(stream_name)
     # :ok = TestBani.delete_publisher(tenant, stream_name)
-    :ok = TestBani.delete_stream(tenant, stream_name)
+    :ok = TestBani.delete_stream(tenant_1, stream_name_1)
+    :ok = TestBani.delete_stream(tenant_1, stream_name_2)
+    :ok = TestBani.delete_stream(tenant_2, stream_name_3)
+
+    # TODO: remove tenant
+    :ok = DynamicSupervisor.stop(Bani.SchedulerDynamicSupervisor)
   end
 
   # test "deletes publisher and subscriber when deleting stream" do

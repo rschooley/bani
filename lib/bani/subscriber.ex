@@ -1,12 +1,13 @@
 defmodule Bani.Subscriber do
-  use GenServer
+  use GenServer, restart: :transient
 
   # Client
 
   def start_link(opts) do
     state = %{
       broker: Keyword.get(opts, :broker, Bani.Broker),
-      conn: Keyword.fetch!(opts, :conn),
+      connection_manager: Keyword.get(opts, :connection_manager, Bani.ConnectionManager),
+      connection_id: Keyword.fetch!(opts, :connection_id),
       handler: Keyword.fetch!(opts, :handler),
       message_processor: Keyword.get(opts, :message_processor, Bani.MessageProcessor),
       stream_name: Keyword.fetch!(opts, :stream_name),
@@ -28,7 +29,10 @@ defmodule Bani.Subscriber do
 
   @impl true
   def init(state) do
-    {:ok, state, {:continue, :create_subscriber}}
+    conn = state.connection_manager.conn(state.connection_id)
+    new_state = Map.put(state, :conn, conn)
+
+    {:ok, new_state, {:continue, :create_subscriber}}
   end
 
   @impl true

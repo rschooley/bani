@@ -1,12 +1,13 @@
 defmodule Bani.Publisher do
-  use GenServer
+  use GenServer, restart: :transient
 
   # Client
 
   def start_link(opts) do
     state = %{
       broker: Keyword.get(opts, :broker, Bani.Broker),
-      conn: Keyword.fetch!(opts, :conn),
+      connection_manager: Keyword.get(opts, :connection_manager, Bani.ConnectionManager),
+      connection_id: Keyword.fetch!(opts, :connection_id),
       publisher_id: Keyword.fetch!(opts, :publisher_id),
       stream_name: Keyword.fetch!(opts, :stream_name),
       tenant: Keyword.fetch!(opts, :tenant)
@@ -24,7 +25,7 @@ defmodule Bani.Publisher do
   end
 
   defp via_tuple(tenant, stream_name) do
-    name = "#{tenant}/#{stream_name}-publisher"
+    name = Bani.KeyRing.publisher_name(tenant, stream_name)
 
     {:via, Registry, {Bani.Registry, name}}
   end
@@ -33,8 +34,10 @@ defmodule Bani.Publisher do
 
   @impl true
   def init(state) do
+    conn = state.connection_manager.conn(state.connection_id)
     publisher_name = Bani.KeyRing.publisher_name(state.tenant, state.stream_name)
-    new_state = Map.put(state, :publisher_name, publisher_name)
+
+    new_state = Map.merge(state, %{conn: conn, publisher_name: publisher_name})
 
     {:ok, new_state, {:continue, :create_publisher}}
   end
