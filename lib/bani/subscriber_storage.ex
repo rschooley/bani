@@ -1,5 +1,5 @@
 defmodule Bani.SubscriberStorage do
-  use Agent
+  use Agent, restart: :transient
 
   def start_link(opts) do
     state = %{
@@ -53,5 +53,11 @@ defmodule Bani.SubscriberStorage do
     Agent.update(name, fn (state) ->
       %{state | poisoned: true, poisoned_err: err}
     end)
+  end
+
+  def stop(tenant, stream_name, subscription_name) do
+    name = via_tuple(tenant, stream_name, subscription_name)
+
+    Agent.stop(name)
   end
 end

@@ -4,13 +4,25 @@ defmodule Bani.ConnectionSupervisor do
   # client
 
   def start_link(opts) do
-    Supervisor.start_link(__MODULE__, opts)
+    connection_id = Keyword.fetch!(opts, :connection_id)
+
+    Supervisor.start_link(__MODULE__, opts, name: via_tuple(connection_id))
+  end
+
+  def exists?(connection_id) do
+    connection_name = Bani.KeyRing.connection_name(connection_id)
+    select = Registry.select(Bani.Registry, [{{:"$1", :_, :_}, [{:==, :"$1", connection_name}], [:"$1"]}])
+
+    case select do
+      [] -> false
+      _ -> true
+    end
   end
 
   def add_publisher(connection_id, tenant, stream_name, publisher_id) do
     publisher_supervisor = child_publisher_supervisor(connection_id)
 
-    {:ok, _} = DynamicSupervisor.start_child(
+    DynamicSupervisor.start_child(
       publisher_supervisor,
       {Bani.Publisher, [
         connection_id: connection_id,
@@ -19,6 +31,12 @@ defmodule Bani.ConnectionSupervisor do
         tenant: tenant
       ]}
     )
+  end
+
+  def remove_publisher(connection_id, pid) do
+    publisher_supervisor = child_publisher_supervisor(connection_id)
+
+    DynamicSupervisor.terminate_child(publisher_supervisor, pid)
   end
 
   def add_subscriber(connection_id, tenant, stream_name, subscription_id, subscription_name, handler) do
@@ -37,6 +55,14 @@ defmodule Bani.ConnectionSupervisor do
     )
   end
 
+  def remove_subscriber(connection_id, pid) do
+    subscriber_supervisor = child_subscriber_supervisor(connection_id)
+
+    DynamicSupervisor.terminate_child(subscriber_supervisor, pid)
+  end
+
+  # these could be moved to Registry lookups instead of direct process navigation
+
   def child_connection_manager(connection_id) do
     children(connection_id)
     |> Keyword.get(Bani.ConnectionManager)
@@ -54,13 +80,19 @@ defmodule Bani.ConnectionSupervisor do
 
   defp child_subscriber_supervisor(connection_id) do
     children(connection_id)
-    |> Keyword.get(Bani.PublSubscriberSupervisorisherSupervisor)
+    |> Keyword.get(Bani.SubscriberSupervisor)
   end
 
   defp children(connection_id) do
     via_tuple(connection_id)
     |> Supervisor.which_children()
     |> Enum.map(fn ({type, child_pid, _, _}) -> {type, child_pid} end)
+  end
+
+  defp via_tuple(connection_id) do
+    name = Bani.KeyRing.connection_name(connection_id)
+
+    {:via, Registry, {Bani.Registry, name}}
   end
 
   # server
@@ -73,14 +105,6 @@ defmodule Bani.ConnectionSupervisor do
       {Bani.SubscriberSupervisor, []}
     ]
 
-    connection_id = Keyword.fetch!(opts, :connection_id)
-
-    Supervisor.init(children, strategy: :one_for_all, name: via_tuple(connection_id))
-  end
-
-  defp via_tuple(connection_id) do
-    name = Bani.KeyRing.connection_name(connection_id)
-
-    {:via, Registry, {Bani.Registry, name}}
+    Supervisor.init(children, strategy: :one_for_all)
   end
 end

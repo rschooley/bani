@@ -1,5 +1,5 @@
 defmodule Bani.SchedulingTest do
-  use BaniTest.Case, async: true
+  use BaniTest.Case, async: false
 
   @conn_opts [
     {:host, "localhost"},
@@ -10,33 +10,39 @@ defmodule Bani.SchedulingTest do
   ]
 
   test "creates and deletes stream" do
-    tenant = "some tenant"
-    stream_name = "scheduling-create-delete-stream"
+    stream_name = "scheduling-creates-and-deletes-stream"
 
-    assert :ok = Bani.Scheduling.create_stream(tenant, @conn_opts, stream_name)
-    assert :ok = Bani.Scheduling.delete_stream(tenant, @conn_opts, stream_name)
+    assert :ok = Bani.Scheduling.create_stream(@conn_opts, stream_name)
+    assert :ok = Bani.Scheduling.delete_stream(@conn_opts, stream_name)
   end
 
-  test "creates publisher" do
+  test "creates and deletes publisher" do
     tenant = "some tenant"
-    stream_name = "scheduling-create-publisher"
+    stream_name = "scheduling-creates-and-deletes-publisher"
 
-    assert :ok = Bani.Scheduling.create_stream(tenant, @conn_opts, stream_name)
+    # Scheduling is made to back the Tenant GenServer which inits the store
+    :ok = Bani.Store.init_store(tenant)
+    :ok = Bani.Scheduling.create_stream(@conn_opts, stream_name)
+
     assert :ok = Bani.Scheduling.create_publisher(tenant, @conn_opts, stream_name)
+    assert :ok = Bani.Scheduling.delete_publisher(tenant, stream_name)
 
-    # TODO: results in {:state, 6... from lake
-    # Bani.Scheduling.delete_stream(tenant, @conn_opts, stream_name)
+    Bani.Scheduling.delete_stream(@conn_opts, stream_name)
   end
 
-  test "creates subscriber" do
+  test "creates and deletes subscriber" do
     tenant = "some tenant"
-    stream_name = "scheduling-create-subscriber"
+    stream_name = "scheduling-creates-and-deletes-subscriber"
+    subscription_name = "subscription-name"
     handler = fn (_prev, curr) -> {:ok, curr} end
 
-    assert :ok = Bani.Scheduling.create_stream(tenant, @conn_opts, stream_name)
-    assert {:ok, _} = Bani.Scheduling.create_subscriber(tenant, @conn_opts, stream_name, handler)
+    # Scheduling is made to back the Tenant GenServer which inits the store
+    :ok = Bani.Store.init_store(tenant)
+    :ok = Bani.Scheduling.create_stream(@conn_opts, stream_name)
 
-    # TODO: results in {:state, 6... from lake
-    # Bani.Scheduling.delete_stream(tenant, @conn_opts, stream_name)
+    assert :ok = Bani.Scheduling.create_subscriber(tenant, @conn_opts, stream_name, subscription_name, handler, %{}, 0, false)
+    assert :ok = Bani.Scheduling.delete_subscriber(tenant, stream_name, subscription_name)
+
+    Bani.Scheduling.delete_stream(@conn_opts, stream_name)
   end
 end

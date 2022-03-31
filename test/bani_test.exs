@@ -19,6 +19,7 @@ defmodule BaniTest do
 
     tenant = "tenant-123"
     stream_name = "creates-stream-and-subscribes"
+    subscription_name = "test-sink"
     message = "sample message"
 
     handler = fn (_prev, curr) ->
@@ -29,23 +30,20 @@ defmodule BaniTest do
       {:ok, curr}
     end
 
-    TestBani.foo("log this")
+    :ok = TestBani.add_tenant(tenant, @conn_opts)
+    :ok = TestBani.create_stream(tenant, stream_name)
+    :ok = TestBani.create_publisher(tenant, stream_name)
+    :ok = TestBani.create_subscriber(tenant, stream_name, subscription_name, handler, %{})
 
-    # :ok = TestBani.add_tenant(tenant, @conn_opts)
-    # :ok = TestBani.create_stream(tenant, stream_name)
-    # :ok = TestBani.create_publisher(tenant, stream_name)
-    # # :ok = TestBani.create_subscriber(tenant, stream_name, "test-sink", handler)
+    :ok = TestBani.publish(tenant, stream_name, message)
 
-    # :ok = TestBani.publish(tenant, stream_name, message)
+    assert_receive {:expect_called, ^ref}
 
-    # # assert_receive {:expect_called, ^ref}
+    :ok = TestBani.delete_subscriber(tenant, stream_name, subscription_name)
+    :ok = TestBani.delete_publisher(tenant, stream_name)
+    :ok = TestBani.delete_stream(tenant, stream_name)
 
-    # # # :ok = TestBani.delete_subscriber(stream_name)
-    # # # :ok = TestBani.delete_publisher(tenant, stream_name)
-    # :ok = TestBani.delete_stream(tenant, stream_name)
-
-    # # # TODO: remove tenant
-    # :ok = DynamicSupervisor.stop(Bani.SchedulerDynamicSupervisor)
+    # TODO: TestBani.remove_tenant(tenant)
   end
 
   test "creates multiple streams and subscribtions" do
@@ -95,9 +93,9 @@ defmodule BaniTest do
     :ok = TestBani.create_publisher(tenant_1, stream_name_2)
     :ok = TestBani.create_publisher(tenant_2, stream_name_3)
 
-    :ok = TestBani.create_subscriber(tenant_1, stream_name_1, "test-sink", handler_1)
-    :ok = TestBani.create_subscriber(tenant_1, stream_name_2, "test-sink", handler_2)
-    :ok = TestBani.create_subscriber(tenant_2, stream_name_3, "test-sink", handler_3)
+    :ok = TestBani.create_subscriber(tenant_1, stream_name_1, "test-sink", handler_1, %{})
+    :ok = TestBani.create_subscriber(tenant_1, stream_name_2, "test-sink", handler_2, %{})
+    :ok = TestBani.create_subscriber(tenant_2, stream_name_3, "test-sink", handler_3, %{})
 
     :ok = TestBani.publish(tenant_1, stream_name_1, message_1)
     :ok = TestBani.publish(tenant_1, stream_name_2, message_2)
@@ -107,14 +105,21 @@ defmodule BaniTest do
     assert_receive {:expect_handler_2_called, ^ref}
     assert_receive {:expect_handler_3_called, ^ref}
 
-    # :ok = TestBani.delete_subscriber(stream_name)
-    # :ok = TestBani.delete_publisher(tenant, stream_name)
+    :ok = TestBani.delete_subscriber(tenant_1, stream_name_1, "test-sink")
+    :ok = TestBani.delete_subscriber(tenant_1, stream_name_2, "test-sink")
+    :ok = TestBani.delete_subscriber(tenant_2, stream_name_3, "test-sink")
+
+    :ok = TestBani.delete_publisher(tenant_1, stream_name_1)
+    :ok = TestBani.delete_publisher(tenant_1, stream_name_2)
+    :ok = TestBani.delete_publisher(tenant_2, stream_name_3)
+
     :ok = TestBani.delete_stream(tenant_1, stream_name_1)
     :ok = TestBani.delete_stream(tenant_1, stream_name_2)
     :ok = TestBani.delete_stream(tenant_2, stream_name_3)
 
-    # TODO: remove tenant
-    :ok = DynamicSupervisor.stop(Bani.SchedulerDynamicSupervisor)
+    # TODO: TestBani.remove_tenant(tenant_1)
+    # TODO: TestBani.remove_tenant(tenant_2)
+    :ok = DynamicSupervisor.stop(Bani.TenantDynamicSupervisor)
   end
 
   # test "deletes publisher and subscriber when deleting stream" do

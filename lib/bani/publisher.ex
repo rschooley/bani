@@ -24,6 +24,10 @@ defmodule Bani.Publisher do
     publish_sync(tenant, stream_name, [message])
   end
 
+  def lookup(tenant, stream_name) do
+    GenServer.call(via_tuple(tenant, stream_name), :lookup)
+  end
+
   defp via_tuple(tenant, stream_name) do
     name = Bani.KeyRing.publisher_name(tenant, stream_name)
 
@@ -89,6 +93,11 @@ defmodule Bani.Publisher do
     new_state = Map.put(state, :publishing_id, state.publishing_id + message_count)
 
     {:reply, :ok, new_state}
+  end
+
+  @implt true
+  def handle_call(:lookup, _from, state) do
+    {:reply, {self(), state.connection_id, state.publisher_id}, state}
   end
 
   @impl true

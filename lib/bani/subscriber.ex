@@ -19,6 +19,10 @@ defmodule Bani.Subscriber do
     GenServer.start_link(__MODULE__, state, name: via_tuple(state.tenant, state.stream_name, state.subscription_name))
   end
 
+  def lookup(tenant, stream_name, subscription_name) do
+    GenServer.call(via_tuple(tenant, stream_name, subscription_name), :lookup)
+  end
+
   defp via_tuple(tenant, stream_name, subscription_name) do
     name = Bani.KeyRing.subscriber_name(tenant, stream_name, subscription_name)
 
@@ -98,6 +102,11 @@ defmodule Bani.Subscriber do
 
         {:noreply, state}
     end
+  end
+
+  @impl true
+  def handle_call(:lookup, _from, state) do
+    {:reply, {self(), state.connection_id, state.subscription_id, state.subscription_name}, state}
   end
 
   @impl true

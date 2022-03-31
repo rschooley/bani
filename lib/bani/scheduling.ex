@@ -1,6 +1,8 @@
 defmodule Bani.Scheduling do
   @behaviour Bani.SchedulingBehaviour
 
+  import Logger
+
   @impl Bani.SchedulingBehaviour
   def create_stream(conn_opts, stream_name) do
     {:ok, conn} = tmp_conn(conn_opts)
@@ -41,56 +43,58 @@ defmodule Bani.Scheduling do
   def create_publisher(tenant, conn_opts, stream_name) do
     {connection_id, publisher_id} = next_available_pubsub_opts(tenant, conn_opts, :publisher)
 
-    Bani.ConnectionSupervisor.add_publisher(connection_id, tenant, stream_name, publisher_id)
+    {:ok, _} = Bani.ConnectionSupervisor.add_publisher(connection_id, tenant, stream_name, publisher_id)
+    :ok
   end
 
   @impl Bani.SchedulingBehaviour
-  def delete_publisher(_tenant, _stream_name) do
-    # Bani.ConnectionSupervisor.remove_publisher(supervisor, conn, tenant, stream_name, id)
+  def delete_publisher(tenant, stream_name) do
+    {pid, connection_id, publisher_id} = Bani.Publisher.lookup(tenant, stream_name)
 
-    # TODO: unlease id from connection manager
-    # delete publisher in rabbit
-    # stop publisher genserver
-    # remove publisher genserver from connection_supervisor
-    # cleanup empty connection supervisor?
-
-    # publisher_name = Bani.KeyRing.publisher_name(tenant, stream_name)
-
-    # Bani.ConnectionSupervisor.remove_publisher(supervisor, tenant, stream_name, id)
-
-    # :ok = Bani.Publisher.delete_publisher(tenant, stream_name)
-
-    # with {connection_manager, available_ids} <- Bani.ConnectionManagement.available_connection_manager(available_key, conn_opts, :publisher),
-    #      {supervisor, conn, id} <- Bani.ConnectionManager.lease(connection_manager, available_key, available_ids, :publisher),
-    #      {:ok, _} <- Bani.ConnectionSupervisor.add_publisher(supervisor, conn, tenant, stream_name, id)
-    # do
-    #   Bani.Publisher.create_publisher(tenant, stream_name)
-    # end
+    :ok = Bani.ConnectionSupervisor.remove_publisher(connection_id, pid)
+    :ok = Bani.Store.release_available_pubsub_id(tenant, connection_id, :publisher, publisher_id)
+    :ok
   end
 
   @impl Bani.SchedulingBehaviour
-  def create_subscriber(tenant, conn_opts, stream_name, subscription_name, handler) do
+  def create_subscriber(tenant, conn_opts, stream_name, subscription_name, handler, acc, offset, poisoned) do
     {connection_id, subscription_id} = next_available_pubsub_opts(tenant, conn_opts, :subscriber)
 
-    Bani.ConnectionSupervisor.add_subscriber(connection_id, tenant, stream_name, subscription_id, subscription_name, handler)
+    storage_opts = [
+      acc: acc,
+      offset: offset,
+      poisoned: poisoned,
+      stream_name: stream_name,
+      subscription_name: subscription_name,
+      tenant: tenant
+    ]
+
+    # TODO: move this to ETS
+    {:ok, _} = Bani.SubscriberStorageDynamicSupervisor.add_storage(storage_opts)
+    {:ok, _} = Bani.ConnectionSupervisor.add_subscriber(connection_id, tenant, stream_name, subscription_id, subscription_name, handler)
+    :ok
   end
 
   @impl Bani.SchedulingBehaviour
-  def delete_subscriber(_tenant, _stream_name) do
+  def delete_subscriber(tenant, stream_name, subscription_name) do
+    {pid, connection_id, subscription_id, subscription_name} = Bani.Subscriber.lookup(tenant, stream_name, subscription_name)
+
+    :ok = Bani.ConnectionSupervisor.remove_subscriber(connection_id, pid)
+    :ok = Bani.SubscriberStorageDynamicSupervisor.remove_storage(tenant, stream_name, subscription_name)
+    :ok = Bani.Store.release_available_pubsub_id(tenant, connection_id, :subscriber, subscription_id)
+    :ok
   end
 
   defp next_available_pubsub_opts(tenant, conn_opts, pubsub_type) do
-    Bani.Store.next_available_pubsub_opts(tenant, pubsub_type)
-    |> next_available_pubsub_opts(conn_opts)
-  end
+    {connection_id, pubsub_id} = Bani.Store.next_available_pubsub_opts(tenant, pubsub_type)
 
-  defp next_available_pubsub_opts({:new, connection_id, pubsub_id}, conn_opts) do
-    {:ok, _} = Bani.ConnectionDynamicSupervisor.add_connection_supervisor(conn_opts, connection_id)
+    if (Bani.ConnectionSupervisor.exists?(connection_id)) do
+      Logger.info("Bani Scheduling - existing connection id found (#{connection_id}) for tenant #{tenant}")
+    else
+      Logger.info("Bani Scheduling - existing connection id not found (#{connection_id}) for tenant #{tenant}")
+      {:ok, _} = Bani.ConnectionDynamicSupervisor.add_connection_supervisor(conn_opts, connection_id)
+    end
 
-    {connection_id, pubsub_id}
-  end
-
-  defp next_available_pubsub_opts({:existing, connection_id, pubsub_id}, _conn_opts) do
     {connection_id, pubsub_id}
   end
 end

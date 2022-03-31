@@ -5,8 +5,8 @@ defmodule Bani.Tenant do
 
   def start_link(opts) do
     init_state = %{
-      scheduling: Keyword.get(opts, :scheduling, Bani.Scheduling),
       conn_opts: Keyword.fetch!(opts, :conn_opts),
+      scheduling: Keyword.get(opts, :scheduling, Bani.Scheduling),
       tenant: Keyword.fetch!(opts, :tenant)
     }
 
@@ -29,8 +29,12 @@ defmodule Bani.Tenant do
     GenServer.call(via_tuple(tenant), {:delete_publisher, stream_name})
   end
 
-  def create_subscriber(tenant, stream_name, subscription_name, handler) do
-    GenServer.call(via_tuple(tenant), {:create_subscriber, stream_name, subscription_name, handler})
+  def create_subscriber(tenant, stream_name, subscription_name, handler, acc, offset, poisoned) do
+    GenServer.call(via_tuple(tenant), {:create_subscriber, stream_name, subscription_name, handler, acc, offset, poisoned})
+  end
+
+  def delete_subscriber(tenant, stream_name, subscription_name) do
+    GenServer.call(via_tuple(tenant), {:delete_subscriber, stream_name, subscription_name})
   end
 
   defp via_tuple(tenant) do
@@ -42,20 +46,23 @@ defmodule Bani.Tenant do
   # Server (callbacks)
 
   @impl true
-  def init(init_state) do
-    {:ok, init_state}
+  def init(state) do
+    # store data will be lost on app restart, deploy, infrastructure upgrade, etc
+    :ok = Bani.Store.init_store(state.tenant)
+
+    {:ok, state}
   end
 
   @impl true
   def handle_call({:create_stream, stream_name}, _from, state) do
-    :ok = state.scheduling.create_stream(state.tenant, state.conn_opts, stream_name)
+    :ok = state.scheduling.create_stream(state.conn_opts, stream_name)
 
     {:reply, :ok, state}
   end
 
   @impl true
   def handle_call({:delete_stream, stream_name}, _from, state) do
-    :ok = state.scheduling.delete_stream(state.tenant, state.conn_opts, stream_name)
+    :ok = state.scheduling.delete_stream(state.conn_opts, stream_name)
 
     {:reply, :ok, state}
   end
@@ -75,8 +82,15 @@ defmodule Bani.Tenant do
   end
 
   @impl true
-  def handle_call({:create_subscriber, stream_name, subscription_name, handler}, _from, state) do
-    {:ok, _} = state.scheduling.create_subscriber(state.tenant, state.conn_opts, stream_name, subscription_name, handler)
+  def handle_call({:create_subscriber, stream_name, subscription_name, handler, acc, offset, poisoned}, _from, state) do
+    :ok = state.scheduling.create_subscriber(state.tenant, state.conn_opts, stream_name, subscription_name, handler, acc, offset, poisoned)
+
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:delete_subscriber, stream_name, subscription_name}, _from, state) do
+    :ok = state.scheduling.delete_subscriber(state.tenant, stream_name, subscription_name)
 
     {:reply, :ok, state}
   end

@@ -25,11 +25,15 @@ defmodule Bani.SchedulingBehaviour do
               conn_opts :: keyword(),
               stream_name :: String.t(),
               subscription_name :: String.t(),
-              handler :: function()
+              handler :: function(),
+              offset :: integer(),
+              acc :: term(),
+              poisoned :: boolean()
             ) :: {:ok, pid()} | {:error, term()}
 
   @callback delete_subscriber(
               tenant :: String.t(),
-              subscription_id :: integer()
+              stream_name :: String.t(),
+              subscription_name :: String.t()
             ) :: :ok | {:error, term()}
 end

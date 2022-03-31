@@ -1,7 +1,6 @@
 defmodule Bani.MessageProcessorTest do
   use BaniTest.Case
 
-  import ExUnit.CaptureLog
   import Mox
 
   setup [:set_mox_global, :verify_on_exit!]

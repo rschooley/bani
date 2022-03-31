@@ -2,7 +2,7 @@ defmodule Bani.TenantDynamicSupervisor do
   use DynamicSupervisor
 
   def start_link(init_arg) do
-    DynamicSupervisor.start_link(__MODULE__, init_arg)
+    DynamicSupervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
   end
 
   def add_tenant(tenant, conn_opts) do

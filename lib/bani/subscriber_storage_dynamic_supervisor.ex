@@ -5,13 +5,15 @@ defmodule Bani.SubscriberStorageDynamicSupervisor do
     DynamicSupervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
   end
 
-  def add_storage(offset, acc \\ nil) do
-    opts = [acc: acc, offset: offset]
-
+  def add_storage(opts) do
     DynamicSupervisor.start_child(
       __MODULE__,
       {Bani.SubscriberStorage, opts}
     )
+  end
+
+  def remove_storage(tenant, stream_name, subscription_name) do
+    Bani.SubscriberStorage.stop(tenant, stream_name, subscription_name)
   end
 
   @impl true
