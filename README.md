@@ -3,10 +3,10 @@
 RabbitMQ Stream processing in Elixir
 
 ## Rules
-RabbitMQ streams support multiple (TCP) connections
-each connection supports 256 (0-255) publishing ids
-each connection supports 256 (0-255) subscription ids
-each tenant has their own RabbitMQ server
+- RabbitMQ streams support multiple (TCP) connections
+- each connection supports 256 (0-255) publishing ids
+- each connection supports 256 (0-255) subscription ids
+- each tenant has their own RabbitMQ server
 
 ## Please note
 This libabry is in active development and is not suited for production use at this time.
