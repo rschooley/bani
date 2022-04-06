@@ -29,6 +29,44 @@ and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
 be found at <https://hexdocs.pm/bani>.
 
 
+## Use
+
+```
+  defmodule MyBani do
+    use Bani
+  end
+```
+
+```
+  conn_opts = [
+    {:host, "localhost"},
+    {:port, 5552},
+    {:username, "guest"},
+    {:password, "guest"},
+    {:vhost, "/dev"}
+  ]
+
+  tenant = "tenant-123"
+  stream_name = "item-abc"
+  
+  # use inline handler, Ecto repo function, etc
+  handler = fn (_prev, curr) -> 
+    {:ok, result} = MyContext.insert(curr)
+  
+    # return acc
+    {:ok, result}
+  end)
+
+  MyBani.add_tenant(tenant, conn_opts)
+  MyBani.create_stream(tenant, stream_name)
+  MyBani.create_publisher(tenant, stream_name)
+  
+  # the last arg is the initial acc value
+  MyBani.create_subscriber(tenant, stream_name, "database-skink", handler, %{})
+
+  MyBani.publish(tenant, stream_name, "a message")
+```
+
 ## Running tests
 The libarary uses a docker image of RabbitMQ with streams enabled.
 
