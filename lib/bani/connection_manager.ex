@@ -1,12 +1,13 @@
 defmodule Bani.ConnectionManager do
   use GenServer
+  @behaviour Bani.ConnectionManagerBehaviour
 
   # Client
 
   def start_link(opts) do
-    init_state = %{
+    state = %{
       broker: Keyword.get(opts, :broker, Bani.Broker),
-      supervisor: Keyword.fetch!(opts, :supervisor),
+      connection_id: Keyword.fetch!(opts, :connection_id),
       host: Keyword.fetch!(opts, :host),
       port: Keyword.fetch!(opts, :port),
       username: Keyword.fetch!(opts, :username),
@@ -14,19 +15,17 @@ defmodule Bani.ConnectionManager do
       vhost: Keyword.fetch!(opts, :vhost)
     }
 
-    GenServer.start_link(__MODULE__, init_state)
+    GenServer.start_link(__MODULE__, state, name: via_tuple(state.connection_id))
   end
 
-  def conn(pid) do
-    GenServer.call(pid, :conn)
+  def conn(connection_id) do
+    GenServer.call(via_tuple(connection_id), :conn)
   end
 
-  def register(pid, key, available_ids) do
-    GenServer.call(pid, {:register, key, available_ids})
-  end
+  defp via_tuple(connection_id) do
+    name = Bani.KeyRing.connection_manager_name(connection_id)
 
-  def lease(pid, key, available_ids, pubsub_type) do
-    GenServer.call(pid, {:lease, key, available_ids, pubsub_type})
+    {:via, Registry, {Bani.Registry, name}}
   end
 
   # Callbacks
@@ -62,25 +61,6 @@ defmodule Bani.ConnectionManager do
   @impl true
   def handle_call(:conn, _from, state) do
     {:reply, state.conn, state}
-  end
-
-  @impl true
-  def handle_call({:register, key, available_ids}, _from, state) do
-    :ok = Bani.Storage.register(key, available_ids)
-
-    {:reply, :ok, state}
-  end
-
-  @impl true
-  def handle_call({:lease, key, available_ids, pubsub_type}, _from, state) do
-    {id, new_available_ids} = next_pubsub_id(available_ids, pubsub_type)
-    :ok = Bani.Storage.update_value(key, new_available_ids)
-
-    {:reply, {state.supervisor, state.conn, id}, state}
-  end
-
-  defp next_pubsub_id(list, key) do
-    Map.get_and_update(list, key, fn curr -> List.pop_at(curr, 0) end)
   end
 
   defp monitor_for_cleanup(pid, ref, {broker, conn}) do

@@ -1,26 +1,35 @@
 defmodule Bani.Publisher do
-  use GenServer
+  use GenServer, restart: :transient
 
   # Client
 
   def start_link(opts) do
-    init_state = %{
+    state = %{
       broker: Keyword.get(opts, :broker, Bani.Broker),
-      conn: Keyword.fetch!(opts, :conn),
+      connection_manager: Keyword.get(opts, :connection_manager, Bani.ConnectionManager),
+      connection_id: Keyword.fetch!(opts, :connection_id),
       publisher_id: Keyword.fetch!(opts, :publisher_id),
-      publishing_id: Keyword.get(opts, :publishing_id, 0),
-      stream_name: Keyword.fetch!(opts, :stream_name)
+      stream_name: Keyword.fetch!(opts, :stream_name),
+      tenant: Keyword.fetch!(opts, :tenant)
     }
 
-    GenServer.start_link(__MODULE__, init_state, name: via_tuple(init_state.stream_name))
+    GenServer.start_link(__MODULE__, state, name: via_tuple(state.tenant, state.stream_name))
   end
 
-  def publish_sync(stream_name, message) do
-    GenServer.call(via_tuple(stream_name), {:publish_sync, message})
+  def publish_sync(tenant, stream_name, messages) when is_binary(tenant) and is_binary(stream_name) and is_list(messages) do
+    GenServer.call(via_tuple(tenant, stream_name), {:publish_sync, messages})
   end
 
-  defp via_tuple(stream_name) do
-    name = "#{stream_name}-publisher"
+  def publish_sync(tenant, stream_name, message) when is_binary(tenant) and is_binary(stream_name) and is_binary(message) do
+    publish_sync(tenant, stream_name, [message])
+  end
+
+  def lookup(tenant, stream_name) do
+    GenServer.call(via_tuple(tenant, stream_name), :lookup)
+  end
+
+  defp via_tuple(tenant, stream_name) do
+    name = Bani.KeyRing.publisher_name(tenant, stream_name)
 
     {:via, Registry, {Bani.Registry, name}}
   end
@@ -28,15 +37,20 @@ defmodule Bani.Publisher do
   # Server (callbacks)
 
   @impl true
-  def init(init_state) do
-    publisher_name = "#{init_state.stream_name}-publisher-#{init_state.publisher_id}"
-    state = Map.merge(init_state, %{publisher_name: publisher_name})
+  def init(state) do
+    conn = state.connection_manager.conn(state.connection_id)
+    publisher_name = Bani.KeyRing.publisher_name(state.tenant, state.stream_name)
 
-    {:ok, state, {:continue, :create_publisher}}
+    new_state = Map.merge(state, %{conn: conn, publisher_name: publisher_name})
+
+    {:ok, new_state, {:continue, :create_publisher}}
   end
 
   @impl true
   def handle_continue(:create_publisher, state) do
+    # can create and then query sequence
+    #  for a new publisher it will be new
+    #  for an existing/recreated publisher it will be the existing
     :ok = state.broker.create_publisher(
       state.conn,
       state.stream_name,
@@ -44,24 +58,46 @@ defmodule Bani.Publisher do
       state.publisher_name
     )
 
+    {:ok, publishing_id} = state.broker.query_publisher_sequence(
+      state.conn,
+      state.publisher_name,
+      state.stream_name
+    )
+
+    new_state = Map.put(state, :publishing_id, publishing_id)
+
     pid = self()
     ref = make_ref()
-    spawn_link(fn -> monitor_for_cleanup(pid, ref, {state.broker, state.conn, state.publisher_id}) end)
+
+    spawn_link(fn -> monitor_for_cleanup(pid, ref, {state.broker, state.conn, state.publisher_id})
+    end)
 
     receive do
       {^ref, :ready} -> :ok
     end
 
-    {:noreply, state}
+    {:noreply, new_state}
   end
 
   @impl true
-  def handle_call({:publish_sync, message}, _from, state) do
-    :ok = state.broker.publish(state.conn, state.publisher_id, message, state.publishing_id)
+  def handle_call({:publish_sync, messages}, _from, state) do
+    message_count = Enum.count(messages)
+    payload = Enum.zip(state.publishing_id..message_count, messages)
 
-    state = %{state | publishing_id: state.publishing_id + 1}
+    :ok = state.broker.publish(
+      state.conn,
+      state.publisher_id,
+      payload
+    )
 
-    {:reply, :ok, state}
+    new_state = Map.put(state, :publishing_id, state.publishing_id + message_count)
+
+    {:reply, :ok, new_state}
+  end
+
+  @implt true
+  def handle_call(:lookup, _from, state) do
+    {:reply, {self(), state.connection_id, state.publisher_id}, state}
   end
 
   @impl true
@@ -76,7 +112,15 @@ defmodule Bani.Publisher do
 
     receive do
       {:EXIT, ^pid, _reason} ->
-        :ok = broker.delete_publisher(conn, publisher_id)
+        # two most probable reasons for an exit
+        # 1) the conn dropped and the ConnectionSupervisor subtree is restarting
+        #    in that case the conn is dead, but that will remove the sub in rabbit
+        # 2) this genserver alone is crashing
+        #    in that case the conn is alive, we'll remove the existing sub and recreate on init
+        if (Process.alive?(conn)) do
+          # if this fails the init will fail and cascade crash the supervisor resetting the conn
+          :ok = broker.delete_publisher(conn, publisher_id)
+        end
     end
   end
 end

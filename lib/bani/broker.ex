@@ -21,13 +21,13 @@ defmodule Bani.Broker do
     :lake.delete(conn, stream_name)
   end
 
+  # TODO: offset atom
+
   @impl Bani.BrokerBehaviour
   def subscribe(conn, stream_name, subscription_id, offset \\ 0)
       when is_pid(conn) and is_binary(stream_name) and is_integer(subscription_id) and is_integer(offset) do
     :lake.subscribe(conn, stream_name, subscription_id, {:offset, offset}, 1000, [])
   end
-
-  # TODO: offset atom
 
   @impl Bani.BrokerBehaviour
   def unsubscribe(conn, subscription_id) when is_pid(conn) and is_integer(subscription_id) do
@@ -47,11 +47,10 @@ defmodule Bani.Broker do
   end
 
   @impl Bani.BrokerBehaviour
-  def publish(conn, publisher_id, message, publishing_id)
-      when is_pid(conn) and is_integer(publisher_id) and is_binary(message) and
-             is_integer(publishing_id) do
+  def publish(conn, publisher_id, messages)
+      when is_pid(conn) and is_integer(publisher_id) and is_list(messages) do
     # TODO: verify published_id
-    [{_published_id, :ok}] = :lake.publish_sync(conn, publisher_id, [{publishing_id, message}])
+    [{_published_id, :ok}] = :lake.publish_sync(conn, publisher_id, messages)
 
     :ok
   end

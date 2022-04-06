@@ -1,17 +1,19 @@
-defmodule Bani.SchedulerDynamicSupervisor do
+defmodule Bani.SubscriberStorageDynamicSupervisor do
   use DynamicSupervisor
 
   def start_link(init_arg) do
     DynamicSupervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
   end
 
-  def add_scheduler(tenant, conn_opts) do
-    opts = [tenant: tenant, conn_opts: conn_opts]
-
+  def add_storage(opts) do
     DynamicSupervisor.start_child(
       __MODULE__,
-      {Bani.Scheduler, opts}
+      {Bani.SubscriberStorage, opts}
     )
+  end
+
+  def remove_storage(tenant, stream_name, subscription_name) do
+    Bani.SubscriberStorage.stop(tenant, stream_name, subscription_name)
   end
 
   @impl true

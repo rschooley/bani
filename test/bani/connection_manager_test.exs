@@ -11,6 +11,7 @@ defmodule Bani.ConnectionManagerTest do
   @password "guest"
   @vhost "/test"
   @broker Bani.MockBroker
+  @connection_id "some-connection-id"
 
   @valid_opts [
     {:host, @host},
@@ -18,7 +19,8 @@ defmodule Bani.ConnectionManagerTest do
     {:username, @username},
     {:password, @password},
     {:vhost, @vhost},
-    {:broker, @broker}
+    {:broker, @broker},
+    {:connection_id, @connection_id}
   ]
 
   setup_all do
@@ -49,10 +51,9 @@ defmodule Bani.ConnectionManagerTest do
   end
 
   test "cleans up on exit", %{valid_opts: valid_opts} do
-    raise "pending"
-
     test_pid = self()
     ref = make_ref()
+
     conn = self()
 
     stub(Bani.MockBroker, :connect, fn (_, _, _, _, _) -> {:ok, conn} end)
@@ -65,7 +66,8 @@ defmodule Bani.ConnectionManagerTest do
       :ok
     end)
 
-    start_supervised!({Bani.ConnectionManager, valid_opts})
+    {:ok, pid} = start_supervised({Bani.ConnectionManager, valid_opts})
+    :ok = GenServer.stop(pid)
 
     assert_receive {:expect_called, ^ref}
   end
@@ -74,24 +76,8 @@ defmodule Bani.ConnectionManagerTest do
     conn = self()
 
     stub(Bani.MockBroker, :connect, fn (_, _, _, _, _) -> {:ok, conn} end)
-    pid = start_supervised!({Bani.ConnectionManager, valid_opts})
+    start_supervised!({Bani.ConnectionManager, valid_opts})
 
-    assert conn == Bani.ConnectionManager.conn(pid)
-  end
-
-  test "registers and leases", %{valid_opts: valid_opts} do
-    conn = self()
-
-    list = %{a: [1, 2, 3], b: [4, 5, 6]}
-
-    stub(Bani.MockBroker, :connect, fn (_, _, _, _, _) -> {:ok, conn} end)
-    pid = start_supervised!({Bani.ConnectionManager, valid_opts})
-
-    :ok = Bani.ConnectionManager.register(pid, :storage_key, list)
-    {supervisor_, conn_, id_} = Bani.ConnectionManager.lease(pid, :storage_key, list, :a)
-
-    assert supervisor_ == Keyword.get(valid_opts, :supervisor)
-    assert conn_ == conn
-    assert id_ == 1
+    assert conn == Bani.ConnectionManager.conn(@connection_id)
   end
 end

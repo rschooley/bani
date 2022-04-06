@@ -1,14 +1,16 @@
-defmodule Bani.ConnectionDynamicSupervisor do
+defmodule Bani.TenantDynamicSupervisor do
   use DynamicSupervisor
 
   def start_link(init_arg) do
     DynamicSupervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
   end
 
-  def add_connection_supervisor(conn_opts) do
+  def add_tenant(tenant, conn_opts) do
+    opts = [tenant: tenant, conn_opts: conn_opts]
+
     DynamicSupervisor.start_child(
       __MODULE__,
-      {Bani.ConnectionSupervisor, conn_opts}
+      {Bani.Tenant, opts}
     )
   end
 

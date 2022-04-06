@@ -52,6 +52,8 @@ defmodule Bani.BrokerBehaviour do
   @doc """
   Subscribes to a stream.
 
+  The offset is 0 based unlike the publishing_id which is 1 based
+
   ## Examples
 
       iex> Bani.Broker.subscribe(conn, "stream-123", 1, :first)
@@ -106,6 +108,8 @@ defmodule Bani.BrokerBehaviour do
   @doc """
   Publishes to a stream synchronously.
 
+  Important: publishing_id is 1 based (RabbitMQ uses mnesia)
+
   ## Examples
 
       iex> Bani.Broker.publish(conn, 10, "message", 1)
@@ -115,12 +119,11 @@ defmodule Bani.BrokerBehaviour do
   @callback publish(
               conn :: pid(),
               publisher_id :: integer(),
-              message :: String.t(),
-              publishing_id :: integer()
+              messages :: [{publishing_id :: integer(), message :: String.t()}]
             ) :: :ok
 
   @doc """
-  Queries a pubslisher's sequence (latest publishing_id).
+  Queries a publisher's sequence (latest publishing_id).
 
   See here for more on publishing_id:
   https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-message-deduplication/
