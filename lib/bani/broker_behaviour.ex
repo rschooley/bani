@@ -120,7 +120,7 @@ defmodule Bani.BrokerBehaviour do
               conn :: pid(),
               publisher_id :: integer(),
               messages :: [{publishing_id :: integer(), message :: String.t()}]
-            ) :: :ok
+            ) :: :ok | {:error, term()}
 
   @doc """
   Queries a publisher's sequence (latest publishing_id).

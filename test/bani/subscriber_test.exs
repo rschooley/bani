@@ -102,7 +102,7 @@ defmodule Bani.SubscriberTest do
     subscription_name = "subscriber-handles-message-delivery-sink"
     tenant = "tenant-123"
     acc = %{a: "a"}
-    offset = 1
+    offset = 0
     chunk = "some chunk"
 
     opts = [

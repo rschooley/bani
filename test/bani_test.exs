@@ -122,6 +122,95 @@ defmodule BaniTest do
     :ok = DynamicSupervisor.stop(Bani.TenantDynamicSupervisor)
   end
 
+  test "creates multiple subscribtions for single stream" do
+    test_pid = self()
+    ref = make_ref()
+
+    tenant = "tenant-123"
+    stream_name = "bani-create-multiple-subscribers-for-single-stream"
+    message = "message 1"
+
+    handler_1 = fn (_prev, curr) ->
+      assert curr == message
+      Process.send(test_pid, {:expect_handler_1_called, ref}, [])
+
+      {:ok, curr}
+    end
+
+    handler_2 = fn (_prev, curr) ->
+      assert curr == message
+      Process.send(test_pid, {:expect_handler_2_called, ref}, [])
+
+      {:ok, curr}
+    end
+
+    :ok = TestBani.add_tenant(tenant, @conn_opts)
+    :ok = TestBani.create_stream(tenant, stream_name)
+    :ok = TestBani.create_publisher(tenant, stream_name)
+
+    :ok = TestBani.create_subscriber(tenant, stream_name, "test-sink-1", handler_1, %{})
+    :ok = TestBani.create_subscriber(tenant, stream_name, "test-sink-2", handler_2, %{})
+
+    :ok = TestBani.publish(tenant, stream_name, message)
+
+    assert_receive {:expect_handler_1_called, ^ref}
+    assert_receive {:expect_handler_2_called, ^ref}
+
+    :ok = TestBani.delete_subscriber(tenant, stream_name, "test-sink-1")
+    :ok = TestBani.delete_subscriber(tenant, stream_name, "test-sink-2")
+    :ok = TestBani.delete_publisher(tenant, stream_name)
+    :ok = TestBani.delete_stream(tenant, stream_name)
+
+    # TODO: TestBani.remove_tenant(tenant)
+    # TODO: TestBani.remove_tenant(tenant_2)
+    :ok = DynamicSupervisor.stop(Bani.TenantDynamicSupervisor)
+  end
+
+  test "handles subscription from offset" do
+    test_pid = self()
+    ref = make_ref()
+
+    tenant = "tenant-123"
+    stream_name = "bani-handles-subscription-from-offset"
+    message_1 = "message 1"
+    message_2 = "message 2"
+    message_3 = "message 3"
+
+    handler = fn (acc, curr) ->
+      if (acc == 0) do
+        assert curr == message_2
+      else
+        assert curr == message_3
+      end
+
+      Process.send(test_pid, {:expect_handler_called, ref}, [])
+
+      {:ok, acc + 1}
+    end
+
+    :ok = TestBani.add_tenant(tenant, @conn_opts)
+    :ok = TestBani.create_stream(tenant, stream_name)
+    :ok = TestBani.create_publisher(tenant, stream_name)
+
+    :ok = TestBani.publish(tenant, stream_name, message_1)
+    :ok = TestBani.publish(tenant, stream_name, message_2)
+    :ok = TestBani.publish(tenant, stream_name, message_3)
+
+    :ok = TestBani.create_subscriber(tenant, stream_name, "test-sink-1", handler, 0, 1)
+
+    assert_receive {:expect_handler_called, ^ref}
+
+    on_exit(fn ->
+      :ok = TestBani.delete_subscriber(tenant, stream_name, "test-sink-1")
+      :ok = TestBani.delete_publisher(tenant, stream_name)
+      :ok = TestBani.delete_stream(tenant, stream_name)
+
+      # TODO: TestBani.remove_tenant(tenant)
+      # TODO: TestBani.remove_tenant(tenant_2)
+      :ok = DynamicSupervisor.stop(Bani.TenantDynamicSupervisor)
+    end)
+  end
+
   # test "deletes publisher and subscriber when deleting stream" do
   # end
 
