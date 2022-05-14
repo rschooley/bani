@@ -16,6 +16,7 @@ defmodule Bani.MixProject do
   def application do
     [
       extra_applications: [:logger],
+      included_applications: [:mnesia],
       mod: {Bani.Application, []}
     ]
   end

@@ -24,3 +24,6 @@ bani-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# local mnesia files
+Mnesia.*
