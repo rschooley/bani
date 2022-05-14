@@ -37,6 +37,10 @@ defmodule Bani.Tenant do
     GenServer.call(via_tuple(tenant), {:delete_subscriber, stream_name, subscription_name})
   end
 
+  def delete_data(tenant) do
+    GenServer.call(via_tuple(tenant), {:delete_data})
+  end
+
   defp via_tuple(tenant) do
     name = Bani.KeyRing.tenant_name(tenant)
 
@@ -47,8 +51,9 @@ defmodule Bani.Tenant do
 
   @impl true
   def init(state) do
-    # store data will be lost on app restart, deploy, infrastructure upgrade, etc
-    :ok = Bani.Store.init_store(state.tenant)
+    :ok = Bani.Store.TenantStore.add_tenant(state.tenant)
+    :ok = Bani.Store.SchedulingStore.init_store(state.tenant)
+    :ok = Bani.Store.SubscriberStore.init_store(state.tenant)
 
     {:ok, state}
   end
@@ -91,6 +96,15 @@ defmodule Bani.Tenant do
   @impl true
   def handle_call({:delete_subscriber, stream_name, subscription_name}, _from, state) do
     :ok = state.scheduling.delete_subscriber(state.tenant, stream_name, subscription_name)
+
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:delete_data}, _from, state) do
+    :ok = Bani.Store.TenantStore.remove_tenant(state.tenant)
+    :ok = Bani.Store.SchedulingStore.delete_store(state.tenant)
+    :ok = Bani.Store.SubscriberStore.delete_store(state.tenant)
 
     {:reply, :ok, state}
   end
