@@ -14,6 +14,14 @@ defmodule Bani.Store.SchedulingStore do
     :ok
   end
 
+  @impl Bani.Store.SchedulingStoreBehaviour
+  def delete_store(tenant) do
+    {:atomic, :ok} = table_name(tenant, :publisher) |> :mnesia.delete_table()
+    {:atomic, :ok} = table_name(tenant, :subscriber) |> :mnesia.delete_table()
+
+    :ok
+  end
+
   defp table_name(tenant, :publisher) do
     :"tenants_#{tenant}_available_publisher_connections"
   end

@@ -19,22 +19,34 @@ defmodule Bani.SubscriberTest do
     ref = make_ref()
 
     handler = fn (_prev, curr) -> {:ok, curr} end
+    offset = 0
     stream_name = "subscriber-initializes"
     subscription_id = 10
     subscription_name = "subscriber-initializes-sink"
     tenant = "tenant-123"
-    offset = 0
+
+    subscriber_key = Bani.KeyRing.subscriber_name(tenant, stream_name, subscription_name)
 
     opts = [
       broker: Bani.MockBroker,
       connection_manager: Bani.MockConnectionManager,
       connection_id: connection_id,
       handler: handler,
+      store: Bani.MockSubscriberStore,
       stream_name: stream_name,
       subscription_id: subscription_id,
       subscription_name: subscription_name,
       tenant: tenant
     ]
+
+    expect(Bani.MockSubscriberStore, :get_subscriber, fn (tenant_, subscriber_key_) ->
+      assert tenant_ == tenant
+      assert subscriber_key_ == subscriber_key
+
+      Process.send(test_pid, {:expect_get_subscriber_called, ref}, [])
+
+      %Bani.Store.SubscriberState{offset: offset}
+    end)
 
     expect(Bani.MockBroker, :subscribe, fn (conn_, stream_name_, subscription_id_, offset_) ->
       assert conn_ == conn
@@ -42,15 +54,53 @@ defmodule Bani.SubscriberTest do
       assert subscription_id_ == subscription_id
       assert offset_ == offset
 
-      Process.send(test_pid, {:expect_called, ref}, [])
+      Process.send(test_pid, {:expect_subscribe_called, ref}, [])
 
       :ok
     end)
 
-    start_subscriber_storage!(opts, offset, %{})
     start_supervised!({Bani.Subscriber, opts})
 
-    assert_receive {:expect_called, ^ref}
+    assert_receive {:expect_get_subscriber_called, ^ref}
+    assert_receive {:expect_subscribe_called, ^ref}
+  end
+
+  test "initializes with locked stream", %{connection_id: connection_id} do
+    test_pid = self()
+    ref = make_ref()
+
+    handler = fn (_prev, curr) -> {:ok, curr} end
+    stream_name = "subscriber-initializes-with-locked-stream"
+    subscription_id = 10
+    subscription_name = "subscriber-initializes-with-locked-stream-sink"
+    tenant = "tenant-123"
+
+    opts = [
+      broker: Bani.MockBroker,
+      connection_manager: Bani.MockConnectionManager,
+      connection_id: connection_id,
+      handler: handler,
+      store: Bani.MockSubscriberStore,
+      strategy: :exactly_once,
+      stream_name: stream_name,
+      subscription_id: subscription_id,
+      subscription_name: subscription_name,
+      tenant: tenant
+    ]
+
+    stub(Bani.MockSubscriberStore, :get_subscriber, fn (_, _) ->
+      %Bani.Store.SubscriberState{locked: true}
+    end)
+
+    stub(Bani.MockBroker, :subscribe, fn (_, _, _, _) ->
+      Process.send(test_pid, {:expect_subscribe_called, ref}, [])
+
+      :ok
+    end)
+
+    start_supervised!({Bani.Subscriber, opts})
+
+    refute_receive {:expect_subscribe_called, ^ref}
   end
 
   test "cleans up on exit", %{conn: conn, connection_id: connection_id} do
@@ -68,12 +118,14 @@ defmodule Bani.SubscriberTest do
       connection_manager: Bani.MockConnectionManager,
       connection_id: connection_id,
       handler: handler,
+      store: Bani.MockSubscriberStore,
       stream_name: stream_name,
       subscription_id: subscription_id,
       subscription_name: subscription_name,
       tenant: tenant
     ]
 
+    stub(Bani.MockSubscriberStore, :get_subscriber, fn (_, _) -> %Bani.Store.SubscriberState{} end)
     stub(Bani.MockBroker, :subscribe, fn (_, _, _, _) -> :ok end)
 
     expect(Bani.MockBroker, :unsubscribe, fn (conn_, subscription_id_) ->
@@ -85,7 +137,6 @@ defmodule Bani.SubscriberTest do
       :ok
     end)
 
-    start_subscriber_storage!(opts)
     {:ok, pid} = start_supervised({Bani.Subscriber, opts})
     :ok = GenServer.stop(pid)
 
@@ -97,134 +148,45 @@ defmodule Bani.SubscriberTest do
     ref = make_ref()
 
     handler = fn (_prev, curr) -> {:ok, curr} end
-    stream_name = "subscriber-handles-message-delivery"
+    store = Bani.MockSubscriberStore
+    stream_name = "subscriber-handles-at-least-once-message-delivery"
     subscription_id = 10
-    subscription_name = "subscriber-handles-message-delivery-sink"
+    subscription_name = "subscriber-handles-at-least-once-message-delivery"
     tenant = "tenant-123"
-    acc = %{a: "a"}
-    offset = 0
-    chunk = "some chunk"
+
+    subscriber_key = Bani.KeyRing.subscriber_name(tenant, stream_name, subscription_name)
 
     opts = [
       broker: Bani.MockBroker,
       connection_manager: Bani.MockConnectionManager,
       connection_id: connection_id,
       handler: handler,
-      message_processor: Bani.MockMessageProcessor,
+      store: store,
+      strategy: :some_strategy,
       stream_name: stream_name,
+      subscriber_strategy: Bani.MockSubscriberStrategy,
       subscription_id: subscription_id,
       subscription_name: subscription_name,
       tenant: tenant
     ]
 
+    stub(Bani.MockSubscriberStore, :get_subscriber, fn (_, _) -> %Bani.Store.SubscriberState{} end)
     stub(Bani.MockBroker, :subscribe, fn (_, _, _, _) -> :ok end)
-    stub(Bani.MockBroker, :chunk_to_messages, fn (_) -> :ok end)
 
-    expect(Bani.MockMessageProcessor, :process, fn (parser_fn_, processing_fn_, chunk_, acc_) ->
-      # assert parser_fn_ == &Bani.MockBroker.chunk_to_messages/1
-      assert parser_fn_
-      assert processing_fn_ == handler
-      assert chunk_ == chunk
-      assert acc_ == acc
+    expect(Bani.MockSubscriberStrategy, :perform, fn (:some_strategy, tenant_, subscriber_key_, store_, process_fn_) ->
+      assert tenant_ == tenant
+      assert subscriber_key_ == subscriber_key
+      assert store_ == store
+      assert process_fn_
 
       Process.send(test_pid, {:expect_called, ref}, [])
 
-      {:ok, acc}
+      {:ok, %{}}
     end)
 
-    start_subscriber_storage!(opts, offset, acc)
     pid = start_supervised!({Bani.Subscriber, opts})
-    send(pid, {:deliver, _response_code = 1, chunk})
+    send(pid, {:deliver, _response_code = 1, "some chunk"})
 
     assert_receive {:expect_called, ^ref}
-  end
-
-  test "updates state on deliver success", %{connection_id: connection_id} do
-    handler = fn (_prev, curr) -> {:ok, curr} end
-    stream_name = "subscriber-updates-state-on-deliver-success"
-    subscription_id = 10
-    subscription_name = "subscriber-updates-state-on-deliver-success-sink"
-    tenant = "tenant-123"
-
-    offset = 10
-    acc = %{a: "a 1"}
-    new_acc = %{a: "a 2", b: "b 1"}
-
-    opts = [
-      broker: Bani.MockBroker,
-      connection_manager: Bani.MockConnectionManager,
-      connection_id: connection_id,
-      handler: handler,
-      message_processor: Bani.MockMessageProcessor,
-      stream_name: stream_name,
-      subscription_id: subscription_id,
-      subscription_name: subscription_name,
-      tenant: tenant
-    ]
-
-    stub(Bani.MockBroker, :subscribe, fn (_, _, _, _) -> :ok end)
-    stub(Bani.MockBroker, :chunk_to_messages, fn (_) -> :ok end)
-    stub(Bani.MockMessageProcessor, :process, fn (_, _, _, _) -> {:ok, new_acc} end)
-
-    start_subscriber_storage!(opts, offset, acc)
-    pid = start_supervised!({Bani.Subscriber, opts})
-    send(pid, {:deliver, _response_code = 1, "some chunk"})
-
-    wait_for_passing(_2_seconds = 2_000, fn ->
-      new_state = Bani.SubscriberStorage.values(tenant, stream_name, subscription_name)
-
-      assert new_state.acc == new_acc
-      assert new_state.offset == offset + 1
-      assert new_state.poisoned == false
-    end)
-  end
-
-  test "updates state on deliver error", %{connection_id: connection_id} do
-    handler = fn (_prev, curr) -> {:ok, curr} end
-    stream_name = "subscriber-updates-state-on-deliver-error"
-    subscription_id = 10
-    subscription_name = "subscriber-updates-state-on-deliver-error-sink"
-    tenant = "tenant-123"
-
-    offset = 10
-    acc = %{a: "a 1"}
-    poisoned_err = "some error"
-
-    opts = [
-      broker: Bani.MockBroker,
-      connection_manager: Bani.MockConnectionManager,
-      connection_id: connection_id,
-      handler: handler,
-      message_processor: Bani.MockMessageProcessor,
-      stream_name: stream_name,
-      subscription_id: subscription_id,
-      subscription_name: subscription_name,
-      tenant: tenant
-    ]
-
-    stub(Bani.MockBroker, :subscribe, fn (_, _, _, _) -> :ok end)
-    stub(Bani.MockBroker, :chunk_to_messages, fn (_) -> :ok end)
-    stub(Bani.MockMessageProcessor, :process, fn (_, _, _, _) -> {:error, poisoned_err} end)
-
-    start_subscriber_storage!(opts, offset, acc)
-    pid = start_supervised!({Bani.Subscriber, opts})
-    send(pid, {:deliver, _response_code = 1, "some chunk"})
-
-    wait_for_passing(_2_seconds = 2_000, fn ->
-      new_state = Bani.SubscriberStorage.values(tenant, stream_name, subscription_name)
-
-      assert new_state.offset == offset
-      assert new_state.poisoned == true
-      assert new_state.poisoned_err == poisoned_err
-    end)
-  end
-
-  defp start_subscriber_storage!(subscriber_opts, offset \\ 0, acc \\ nil, poisoned \\ false) do
-    opts =
-      subscriber_opts
-      |> Keyword.take([:stream_name, :subscription_name, :tenant])
-      |> Keyword.merge([offset: offset, acc: acc, poisoned: poisoned])
-
-    start_supervised!({Bani.SubscriberStorage, opts})
   end
 end

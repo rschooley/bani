@@ -1,19 +1,54 @@
 defmodule Bani.Subscriber do
   use GenServer, restart: :transient
 
-  # Client
+  @moduledoc """
+  Defines a subscriber GenServer.
 
+  Critical parts of this GenServer's state is persisted to a local store
+   to survive crashes, unexpected restarts, container orchestration upgrades, etc
+  """
+
+  @doc """
+  Starts a subscriber GenServer.
+
+  Required options:
+    * `:connection_id`- The id of the connection.  Used to lookup through connection_manager module.
+    * `:handler`- The function passed by the calling lib
+    * `:stream_name`- The name of the stream in rabbit
+    * `:subscription_id`- The id of the subscriber in rabbit
+    * `:subscription_name`- The name of the subscription (sink_to_pg, main_pipeline, etc)
+    * `:tenant`- The id/name of the tenant
+
+  Default options:
+    * `:strategy`- The subscriber strategy
+      currently supports :at_least_once | :exactly_once, defaults to :at_least_once
+
+  Optional dependencies for testing:
+    * `:broker`- The rabbitmq lib
+    * `:connection_manager`- The connection manager module
+    * `:message_processor`- The message processor module
+    * `:store`- The local store module for persisting state
+    * `:subscriber_strategy`- The subscriber strategy module
+  """
   def start_link(opts) do
     state = %{
-      broker: Keyword.get(opts, :broker, Bani.Broker),
-      connection_manager: Keyword.get(opts, :connection_manager, Bani.ConnectionManager),
+      # required options
       connection_id: Keyword.fetch!(opts, :connection_id),
       handler: Keyword.fetch!(opts, :handler),
-      message_processor: Keyword.get(opts, :message_processor, Bani.MessageProcessor),
       stream_name: Keyword.fetch!(opts, :stream_name),
       subscription_id: Keyword.fetch!(opts, :subscription_id),
       subscription_name: Keyword.fetch!(opts, :subscription_name),
-      tenant: Keyword.fetch!(opts, :tenant)
+      tenant: Keyword.fetch!(opts, :tenant),
+
+      # default options
+      strategy: Keyword.get(opts, :strategy, :at_least_once),
+
+      # optional dependencies for testing
+      broker: Keyword.get(opts, :broker, Bani.Broker),
+      connection_manager: Keyword.get(opts, :connection_manager, Bani.ConnectionManager),
+      message_processor: Keyword.get(opts, :message_processor, Bani.MessageProcessor),
+      store: Keyword.get(opts, :store, Bani.Store.SubscriberStore),
+      subscriber_strategy: Keyword.get(opts, :subscriber_strategy, Bani.SubscriberStrategy)
     }
 
     GenServer.start_link(__MODULE__, state, name: via_tuple(state.tenant, state.stream_name, state.subscription_name))
@@ -23,16 +58,31 @@ defmodule Bani.Subscriber do
     GenServer.call(via_tuple(tenant, stream_name, subscription_name), :lookup)
   end
 
+  # TODO
+  # def resubscribe() do
+  # end
+
   defp via_tuple(tenant, stream_name, subscription_name) do
-    name = Bani.KeyRing.subscriber_name(tenant, stream_name, subscription_name)
+    name = subscriber_key(tenant, stream_name, subscription_name)
 
     {:via, Registry, {Bani.Registry, name}}
+  end
+
+  defp subscriber_key(state) do
+    subscriber_key(state.tenant, state.stream_name, state.subscription_name)
+  end
+
+  defp subscriber_key(tenant, stream_name, subscription_name) do
+    Bani.KeyRing.subscriber_name(tenant, stream_name, subscription_name)
   end
 
   # Server (callbacks)
 
   @impl true
   def init(state) do
+    # if we passed conn in to start_link
+    #  and the conn dies and this server restarts
+    #  on retart it would use the original conn
     conn = state.connection_manager.conn(state.connection_id)
     new_state = Map.put(state, :conn, conn)
 
@@ -41,12 +91,27 @@ defmodule Bani.Subscriber do
 
   @impl true
   def handle_continue(:create_subscriber, state) do
-    offset = Bani.SubscriberStorage.offset(state.tenant, state.stream_name, state.subscription_name)
+    state.store.get_subscriber(state.tenant, subscriber_key(state))
+    |> subscribe(state)
+
+    # TODO: we could store a copy of the offset in the genserver state
+    #  and check the offset against the store to better support the exactly_once strategy
+    {:noreply, state}
+  end
+
+  defp subscribe(%Bani.Store.SubscriberState{locked: true}, %{strategy: :exactly_once}) do
+    # don't subscribe, needs manual reconciliation
+  end
+
+  defp subscribe(%Bani.Store.SubscriberState{offset: offset}, state) do
+    # in the case of at_least_once and locked
+    #  pick up subscribe where subscriber_strategy marked in store
 
     # subscriptions are per conn per subscription id
     # conns don't reconnect
     # if a ConnectionManager restarts there is a new conn
-    # so we create new subscriptions in rabbit on genserver init
+    # and we unsubscribe on exit if the conn is still alive
+    # so we always create a new subscription to rabbit on genserver init
     :ok = state.broker.subscribe(
       state.conn,
       state.stream_name,
@@ -54,6 +119,7 @@ defmodule Bani.Subscriber do
       offset
     )
 
+    # boilerplate process cleanup
     pid = self()
     ref = make_ref()
 
@@ -63,56 +129,40 @@ defmodule Bani.Subscriber do
     receive do
       {^ref, :ready} -> :ok
     end
-
-    {:noreply, state}
   end
 
   @impl true
   def handle_info({:deliver, _response_code, chunk}, state) do
-    acc = Bani.SubscriberStorage.acc(state.tenant, state.stream_name, state.subscription_name)
+    # TODO: refactor / cleanup
+    process_fn = fn (acc) ->
+      state.message_processor.process(
+        state.broker.chunk_to_messages,
+        state.handler,
+        chunk,
+        acc
+      )
+    end
 
-    result = state.message_processor.process(
-      &state.broker.chunk_to_messages/1,
-      state.handler,
-      chunk,
-      acc
+    {:ok, _} = state.subscriber_strategy.perform(
+      state.strategy,
+      state.tenant,
+      subscriber_key(state),
+      state.store,
+      process_fn
     )
 
-    case result do
-      {:ok, new_acc} ->
-        # TODO: multiple messages & offset inc
-        Bani.SubscriberStorage.update(
-          state.tenant,
-          state.stream_name,
-          state.subscription_name,
-          1,
-          new_acc
-        )
-
-        {:noreply, state}
-
-      {:error, err} ->
-        # TODO: should this unsubscribe from the broker
-        Bani.SubscriberStorage.poison(
-          state.tenant,
-          state.stream_name,
-          state.subscription_name,
-          err
-        )
-
-        {:noreply, state}
-    end
-  end
-
-  @impl true
-  def handle_call(:lookup, _from, state) do
-    {:reply, {self(), state.connection_id, state.subscription_id, state.subscription_name}, state}
+    {:noreply, state}
   end
 
   @impl true
   def handle_info({:metadata_update, _, _stream_name}, state) do
     # TODO: handle these messages
     {:noreply, state}
+  end
+
+  @impl true
+  def handle_call(:lookup, _from, state) do
+    {:reply, {self(), state.connection_id, state.subscription_id, state.subscription_name}, state}
   end
 
   defp monitor_for_cleanup(pid, ref, {broker, conn, subscription_id}) do

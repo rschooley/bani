@@ -3,6 +3,10 @@ defmodule Bani.Store.SchedulingStoreBehaviour do
               tenant :: String
             ) :: :ok
 
+  @callback delete_store(
+              tenant :: String
+            ) :: :ok
+
   @callback next_available_pubsub_opts(
               tenant :: String,
               pub_sub_type :: atom()

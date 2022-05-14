@@ -19,6 +19,8 @@ defmodule BaniTest.Case do
     Mox.defmock(Bani.MockConnectionManager, for: Bani.ConnectionManagerBehaviour)
     Mox.defmock(Bani.MockMessageProcessor, for: Bani.MessageProcessorBehaviour)
     Mox.defmock(Bani.MockScheduling, for: Bani.SchedulingBehaviour)
+    Mox.defmock(Bani.MockSubscriberStore, for: Bani.Store.SubscriberStoreBehaviour)
+    Mox.defmock(Bani.MockSubscriberStrategy, for: Bani.SubscriberStrategyBehaviour)
 
     :ok
   end
