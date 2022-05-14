@@ -114,9 +114,9 @@ defmodule Bani.Publisher do
       {:EXIT, ^pid, _reason} ->
         # two most probable reasons for an exit
         # 1) the conn dropped and the ConnectionSupervisor subtree is restarting
-        #    in that case the conn is dead, but that will remove the sub in rabbit
+        #    in that case the conn is dead, but that will remove the pub in rabbit
         # 2) this genserver alone is crashing
-        #    in that case the conn is alive, we'll remove the existing sub and recreate on init
+        #    in that case the conn is alive, we'll remove the existing pub and recreate on init
         if (Process.alive?(conn)) do
           # if this fails the init will fail and cascade crash the supervisor resetting the conn
           :ok = broker.delete_publisher(conn, publisher_id)
