@@ -9,7 +9,6 @@ defmodule Bani.Application do
   def start(_type, _args) do
     children = [
       {Registry, keys: :unique, name: Bani.Registry},
-      {Bani.SubscriberStorageDynamicSupervisor, []},
       {Bani.ConnectionDynamicSupervisor, []},
       {Bani.TenantDynamicSupervisor, []}
     ]
