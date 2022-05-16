@@ -27,8 +27,7 @@ defmodule Bani.SchedulingBehaviour do
               subscription_name :: String.t(),
               handler :: function(),
               offset :: integer(),
-              acc :: term(),
-              poisoned :: boolean()
+              acc :: term()
             ) :: {:ok, pid()} | {:error, term()}
 
   @callback delete_subscriber(

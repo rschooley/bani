@@ -113,7 +113,6 @@ defmodule Bani.TenantTest do
 
     offset = 0
     acc = %{}
-    poisoned = false
 
     opts = [
       conn_opts: conn_opts,
@@ -121,7 +120,7 @@ defmodule Bani.TenantTest do
       tenant: tenant
     ]
 
-    expect(Bani.MockScheduling, :create_subscriber, fn (tenant_, conn_opts_, stream_name_, subscription_name_, handler_, acc_, offset_, poisoned_) ->
+    expect(Bani.MockScheduling, :create_subscriber, fn (tenant_, conn_opts_, stream_name_, subscription_name_, handler_, acc_, offset_) ->
       assert tenant_ == tenant
       assert conn_opts_ == conn_opts
       assert stream_name_ == stream_name
@@ -130,11 +129,10 @@ defmodule Bani.TenantTest do
 
       assert acc_ == acc
       assert offset_ == offset
-      assert poisoned_ == poisoned
 
       Process.send(test_pid, {:expect_create_subscriber_called, ref}, [])
 
-      {:ok, self()}
+      :ok
     end)
 
     expect(Bani.MockScheduling, :delete_subscriber, fn (tenant_, stream_name_, subscription_name_) ->
@@ -149,7 +147,7 @@ defmodule Bani.TenantTest do
 
     start_supervised!({Bani.Tenant, opts})
 
-    assert :ok = Bani.Tenant.create_subscriber(tenant, stream_name, subscription_name, handler, acc, offset, poisoned)
+    assert :ok = Bani.Tenant.create_subscriber(tenant, stream_name, subscription_name, handler, acc, offset)
     assert :ok = Bani.Tenant.delete_subscriber(tenant, stream_name, subscription_name)
 
     assert_receive {:expect_create_subscriber_called, ^ref}

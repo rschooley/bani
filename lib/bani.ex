@@ -36,8 +36,8 @@ defmodule Bani do
         Bani.Tenant.delete_publisher(tenant, stream_name)
       end
 
-      def create_subscriber(tenant, stream_name, subscription_name, handler, acc, offset \\ 0, poisoned \\ false) do
-        Bani.Tenant.create_subscriber(tenant, stream_name, subscription_name, handler, acc, offset, poisoned)
+      def create_subscriber(tenant, stream_name, subscription_name, handler, acc, offset \\ 0) do
+        Bani.Tenant.create_subscriber(tenant, stream_name, subscription_name, handler, acc, offset)
       end
 
       def delete_subscriber(tenant, stream_name, subscription_name) do

@@ -29,8 +29,8 @@ defmodule Bani.Tenant do
     GenServer.call(via_tuple(tenant), {:delete_publisher, stream_name})
   end
 
-  def create_subscriber(tenant, stream_name, subscription_name, handler, acc, offset, poisoned) do
-    GenServer.call(via_tuple(tenant), {:create_subscriber, stream_name, subscription_name, handler, acc, offset, poisoned})
+  def create_subscriber(tenant, stream_name, subscription_name, handler, acc, offset) do
+    GenServer.call(via_tuple(tenant), {:create_subscriber, stream_name, subscription_name, handler, acc, offset})
   end
 
   def delete_subscriber(tenant, stream_name, subscription_name) do
@@ -87,8 +87,8 @@ defmodule Bani.Tenant do
   end
 
   @impl true
-  def handle_call({:create_subscriber, stream_name, subscription_name, handler, acc, offset, poisoned}, _from, state) do
-    :ok = state.scheduling.create_subscriber(state.tenant, state.conn_opts, stream_name, subscription_name, handler, acc, offset, poisoned)
+  def handle_call({:create_subscriber, stream_name, subscription_name, handler, acc, offset}, _from, state) do
+    :ok = state.scheduling.create_subscriber(state.tenant, state.conn_opts, stream_name, subscription_name, handler, acc, offset)
 
     {:reply, :ok, state}
   end

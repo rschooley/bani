@@ -21,7 +21,7 @@ defmodule Bani.Subscriber do
 
   Default options:
     * `:strategy`- The subscriber strategy
-      currently supports :at_least_once | :exactly_once, defaults to :at_least_once
+      currently supports :at_least_once | :exactly_once, defaults to :exactly_once
 
   Optional dependencies for testing:
     * `:broker`- The rabbitmq lib
@@ -41,7 +41,7 @@ defmodule Bani.Subscriber do
       tenant: Keyword.fetch!(opts, :tenant),
 
       # default options
-      strategy: Keyword.get(opts, :strategy, :at_least_once),
+      strategy: Keyword.get(opts, :strategy, :exactly_once),
 
       # optional dependencies for testing
       broker: Keyword.get(opts, :broker, Bani.Broker),
@@ -99,11 +99,11 @@ defmodule Bani.Subscriber do
     {:noreply, state}
   end
 
-  defp subscribe(%Bani.Store.SubscriberState{locked: true}, %{strategy: :exactly_once}) do
+  defp subscribe({:ok, %Bani.Store.SubscriberState{locked: true}}, %{strategy: :exactly_once}) do
     # don't subscribe, needs manual reconciliation
   end
 
-  defp subscribe(%Bani.Store.SubscriberState{offset: offset}, state) do
+  defp subscribe({:ok, %Bani.Store.SubscriberState{offset: offset}}, state) do
     # in the case of at_least_once and locked
     #  pick up subscribe where subscriber_strategy marked in store
 
@@ -136,7 +136,7 @@ defmodule Bani.Subscriber do
     # TODO: refactor / cleanup
     process_fn = fn (acc) ->
       state.message_processor.process(
-        state.broker.chunk_to_messages,
+        &state.broker.chunk_to_messages/1,
         state.handler,
         chunk,
         acc

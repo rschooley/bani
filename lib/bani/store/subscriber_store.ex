@@ -3,6 +3,7 @@ defmodule Bani.Store.SubscriberStore do
 
   alias Bani.Store.SubscriberState
 
+  # change this change subscriber state struct
   @table_attrs [:subscriber_key, :acc, :offset, :locked]
 
   @impl Bani.Store.SubscriberStoreBehaviour
@@ -41,6 +42,18 @@ defmodule Bani.Store.SubscriberStore do
     {:atomic, :ok} =
       :mnesia.transaction(fn ->
         :mnesia.write({table_name, subscriber_key, acc, offset, _locked = false})
+      end)
+
+    :ok
+  end
+
+  @impl Bani.Store.SubscriberStoreBehaviour
+  def remove_subscriber(tenant, subscriber_key) do
+    table_name = table_name(tenant)
+
+    {:atomic, :ok} =
+      :mnesia.transaction(fn ->
+        :mnesia.delete({table_name, subscriber_key})
       end)
 
     :ok

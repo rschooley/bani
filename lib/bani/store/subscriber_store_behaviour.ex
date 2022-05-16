@@ -14,6 +14,11 @@ defmodule Bani.Store.SubscriberStoreBehaviour do
               offset :: Integer.t()
             ) :: :ok
 
+  @callback remove_subscriber(
+              tenant :: String.t(),
+              subscriber_key :: String.t()
+            ) :: :ok
+
   @callback get_subscriber(
               tenant :: String.t(),
               subscriber_key :: String.t()

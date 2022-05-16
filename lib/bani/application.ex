@@ -13,6 +13,10 @@ defmodule Bani.Application do
       {Bani.TenantDynamicSupervisor, []}
     ]
 
+    # Configure database and top level store
+    :ok = Bani.Store.init_database()
+    :ok = Bani.Store.TenantStore.init_store()
+
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Bani.Supervisor]

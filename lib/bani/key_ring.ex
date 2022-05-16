@@ -15,8 +15,12 @@ defmodule Bani.KeyRing do
     "tenants/#{tenant}/streams/#{stream_name}/subscribers/#{subscription_name}/agent"
   end
 
-  def subscriber_name(tenant, stream_name, subscription_name) do
+  def subscriber_key(tenant, stream_name, subscription_name) do
     "tenants/#{tenant}/streams/#{stream_name}/subscribers/#{subscription_name}"
+  end
+
+  def subscriber_name(tenant, stream_name, subscription_name) do
+    subscriber_key(tenant, stream_name, subscription_name)
   end
 
   def tenant_name(tenant) do

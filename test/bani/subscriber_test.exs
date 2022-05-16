@@ -45,7 +45,7 @@ defmodule Bani.SubscriberTest do
 
       Process.send(test_pid, {:expect_get_subscriber_called, ref}, [])
 
-      %Bani.Store.SubscriberState{offset: offset}
+      {:ok, %Bani.Store.SubscriberState{offset: offset}}
     end)
 
     expect(Bani.MockBroker, :subscribe, fn (conn_, stream_name_, subscription_id_, offset_) ->
@@ -89,7 +89,7 @@ defmodule Bani.SubscriberTest do
     ]
 
     stub(Bani.MockSubscriberStore, :get_subscriber, fn (_, _) ->
-      %Bani.Store.SubscriberState{locked: true}
+      {:ok, %Bani.Store.SubscriberState{locked: true}}
     end)
 
     stub(Bani.MockBroker, :subscribe, fn (_, _, _, _) ->
@@ -125,7 +125,7 @@ defmodule Bani.SubscriberTest do
       tenant: tenant
     ]
 
-    stub(Bani.MockSubscriberStore, :get_subscriber, fn (_, _) -> %Bani.Store.SubscriberState{} end)
+    stub(Bani.MockSubscriberStore, :get_subscriber, fn (_, _) -> {:ok, %Bani.Store.SubscriberState{}} end)
     stub(Bani.MockBroker, :subscribe, fn (_, _, _, _) -> :ok end)
 
     expect(Bani.MockBroker, :unsubscribe, fn (conn_, subscription_id_) ->
@@ -170,7 +170,7 @@ defmodule Bani.SubscriberTest do
       tenant: tenant
     ]
 
-    stub(Bani.MockSubscriberStore, :get_subscriber, fn (_, _) -> %Bani.Store.SubscriberState{} end)
+    stub(Bani.MockSubscriberStore, :get_subscriber, fn (_, _) -> {:ok, %Bani.Store.SubscriberState{}} end)
     stub(Bani.MockBroker, :subscribe, fn (_, _, _, _) -> :ok end)
 
     expect(Bani.MockSubscriberStrategy, :perform, fn (:some_strategy, tenant_, subscriber_key_, store_, process_fn_) ->
