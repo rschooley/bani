@@ -1,7 +1,7 @@
 defmodule Bani.Store.TenantStoreBehaviour do
   @callback init_store() :: :ok
 
-  @callback add_tenant(tenant :: String.t()) :: :ok
+  @callback add_tenant(tenant :: String.t(), conn_opts :: keyword()) :: :ok
 
   @callback remove_tenant(tenant :: String.t()) :: :ok
 
