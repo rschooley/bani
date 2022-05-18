@@ -3,8 +3,7 @@ defmodule Bani.Store.SubscriberStore do
 
   alias Bani.Store.SubscriberState
 
-  # change this change subscriber state struct
-  @table_attrs [:subscriber_key, :acc, :offset, :locked]
+  @table_attrs [:key, :value]
 
   @impl Bani.Store.SubscriberStoreBehaviour
   def init_store(tenant) do
@@ -38,10 +37,11 @@ defmodule Bani.Store.SubscriberStore do
   @impl Bani.Store.SubscriberStoreBehaviour
   def add_subscriber(tenant, subscriber_key, acc, offset) do
     table_name = table_name(tenant)
+    state = %SubscriberState{acc: acc, offset: offset, locked: false}
 
     {:atomic, :ok} =
       :mnesia.transaction(fn ->
-        :mnesia.write({table_name, subscriber_key, acc, offset, _locked = false})
+        :mnesia.write({table_name, {:sub, subscriber_key}, state})
       end)
 
     :ok
@@ -51,12 +51,15 @@ defmodule Bani.Store.SubscriberStore do
   def remove_subscriber(tenant, subscriber_key) do
     table_name = table_name(tenant)
 
-    {:atomic, :ok} =
+    result =
       :mnesia.transaction(fn ->
-        :mnesia.delete({table_name, subscriber_key})
+        :mnesia.delete({table_name, {:sub, subscriber_key}})
       end)
 
-    :ok
+    case result do
+      {:atomic, :ok} -> :ok
+      {:aborted, reason} -> {:error, reason}
+    end
   end
 
   @impl Bani.Store.SubscriberStoreBehaviour
@@ -65,11 +68,12 @@ defmodule Bani.Store.SubscriberStore do
 
     result =
       :mnesia.transaction(fn ->
-        :mnesia.read({table_name, subscriber_key})
+        :mnesia.read({table_name, {:sub, subscriber_key}})
       end)
 
     case result do
       {:atomic, [record]} -> {:ok, subscriber_tuple_to_struct(record)}
+      {:atomic, []} -> {:error, "not found"}
       {:aborted, reason} -> {:error, reason}
     end
   end
@@ -77,17 +81,19 @@ defmodule Bani.Store.SubscriberStore do
   @impl Bani.Store.SubscriberStoreBehaviour
   def lock_subscriber(tenant, subscriber_key) do
     table_name = table_name(tenant)
+    key = {:sub, subscriber_key}
 
     result =
       :mnesia.transaction(fn ->
-        [{_, _, acc, offset, locked}] = :mnesia.read({table_name, subscriber_key})
+        [{_, _, state}] = :mnesia.read({table_name, key})
 
-        case locked do
+        case state.locked do
           true ->
             :already_locked
 
           false ->
-            tuple = {table_name, subscriber_key, acc, offset, _locked = true}
+            state = %{state | locked: true}
+            tuple = {table_name, key, state}
 
             :ok = :mnesia.write(tuple)
             tuple
@@ -104,15 +110,17 @@ defmodule Bani.Store.SubscriberStore do
   @impl Bani.Store.SubscriberStoreBehaviour
   def unlock_subscriber(tenant, subscriber_key, new_acc, inc_offset) do
     table_name = table_name(tenant)
+    key = {:sub, subscriber_key}
 
     result =
       :mnesia.transaction(fn ->
-        [{_, _, _, offset, locked}] = :mnesia.read({table_name, subscriber_key})
+        [{_, _, state}] = :mnesia.read({table_name, key})
 
-        tuple = {table_name, subscriber_key, new_acc, offset + inc_offset, _locked = false}
-
-        case locked do
+        case state.locked do
           true ->
+            state = %{state | acc: new_acc, offset: state.offset + inc_offset, locked: false}
+            tuple = {table_name, key, state}
+
             :ok = :mnesia.write(tuple)
             tuple
 
@@ -131,12 +139,14 @@ defmodule Bani.Store.SubscriberStore do
   @impl Bani.Store.SubscriberStoreBehaviour
   def update_subscriber(tenant, subscriber_key, new_acc, inc_offset) do
     table_name = table_name(tenant)
+    key = {:sub, subscriber_key}
 
     result =
       :mnesia.transaction(fn ->
-        [{_, _, _, offset, locked}] = :mnesia.read({table_name, subscriber_key})
+        [{_, _, state}] = :mnesia.read({table_name, key})
 
-        tuple = {table_name, subscriber_key, new_acc, offset + inc_offset, locked}
+        state = %{state | acc: new_acc, offset: state.offset + inc_offset}
+        tuple = {table_name, key, state}
 
         :ok = :mnesia.write(tuple)
         tuple
@@ -152,17 +162,12 @@ defmodule Bani.Store.SubscriberStore do
     :"tenants_#{tenant}_subscribers"
   end
 
-  defp subscriber_tuple_to_struct(tuple) when is_tuple(tuple) do
-    # don't know if this is going to be expensive
-    #  but working with the tuples outside of this module gets messy
-    list =
-      tuple
-      # trim the table name
-      |> Tuple.delete_at(0)
-      |> Tuple.to_list()
+  defp subscriber_tuple_to_struct(tuple) when is_tuple(tuple) and tuple_size(tuple) == 3 do
+    {_table, {type, key}, struct} = tuple
 
-    zipped = Enum.zip(@table_attrs, list)
-
-    Kernel.struct!(SubscriberState, zipped)
+    case type do
+      :pub -> Map.put(struct, :publisher_key, key)
+      :sub -> Map.put(struct, :subscriber_key, key)
+    end
   end
 end

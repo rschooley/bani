@@ -146,7 +146,12 @@ defmodule Bani.Store.SchedulingStore do
     :ok
   end
 
-  defp do_release_available_pubsub_id([{_table, connection_id, available_pubsub_ids}], table, _connection_id, pubsub_id) do
+  defp do_release_available_pubsub_id(
+         [{_table, connection_id, available_pubsub_ids}],
+         table,
+         _connection_id,
+         pubsub_id
+       ) do
     # add to the front of the existing list
     new_list = List.insert_at(available_pubsub_ids, 0, pubsub_id)
 

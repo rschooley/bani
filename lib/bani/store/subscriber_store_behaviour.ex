@@ -1,11 +1,7 @@
 defmodule Bani.Store.SubscriberStoreBehaviour do
-  @callback init_store(
-              tenant :: String
-            ) :: :ok
+  @callback init_store(tenant :: String) :: :ok
 
-  @callback delete_store(
-              tenant :: String
-            ) :: :ok
+  @callback delete_store(tenant :: String) :: :ok
 
   @callback add_subscriber(
               tenant :: String.t(),
