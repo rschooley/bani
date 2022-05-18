@@ -13,6 +13,7 @@ defmodule BaniTest do
     use Bani
   end
 
+  @tag capture_log: true
   test "creates stream and subscribes" do
     test_pid = self()
     ref = make_ref()
@@ -43,9 +44,10 @@ defmodule BaniTest do
     :ok = TestBani.delete_publisher(tenant, stream_name)
     :ok = TestBani.delete_stream(tenant, stream_name)
 
-    # TODO: TestBani.remove_tenant(tenant)
+    :ok = TestBani.remove_tenant(tenant)
   end
 
+  @tag capture_log: true
   test "creates multiple streams and subscribtions" do
     test_pid = self()
     ref = make_ref()
@@ -117,11 +119,12 @@ defmodule BaniTest do
     :ok = TestBani.delete_stream(tenant_1, stream_name_2)
     :ok = TestBani.delete_stream(tenant_2, stream_name_3)
 
-    # TODO: TestBani.remove_tenant(tenant_1)
-    # TODO: TestBani.remove_tenant(tenant_2)
+    :ok = TestBani.remove_tenant(tenant_1)
+    :ok = TestBani.remove_tenant(tenant_2)
     :ok = DynamicSupervisor.stop(Bani.TenantDynamicSupervisor)
   end
 
+  @tag capture_log: true
   test "creates multiple subscribtions for single stream" do
     test_pid = self()
     ref = make_ref()
@@ -161,11 +164,11 @@ defmodule BaniTest do
     :ok = TestBani.delete_publisher(tenant, stream_name)
     :ok = TestBani.delete_stream(tenant, stream_name)
 
-    # TODO: TestBani.remove_tenant(tenant)
-    # TODO: TestBani.remove_tenant(tenant_2)
+    :ok = TestBani.remove_tenant(tenant)
     :ok = DynamicSupervisor.stop(Bani.TenantDynamicSupervisor)
   end
 
+  @tag capture_log: true
   test "handles subscription from offset" do
     test_pid = self()
     ref = make_ref()
@@ -205,8 +208,7 @@ defmodule BaniTest do
       :ok = TestBani.delete_publisher(tenant, stream_name)
       :ok = TestBani.delete_stream(tenant, stream_name)
 
-      # TODO: TestBani.remove_tenant(tenant)
-      # TODO: TestBani.remove_tenant(tenant_2)
+      :ok = TestBani.remove_tenant(tenant)
       :ok = DynamicSupervisor.stop(Bani.TenantDynamicSupervisor)
     end)
   end

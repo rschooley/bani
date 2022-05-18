@@ -14,6 +14,15 @@ defmodule Bani.TenantDynamicSupervisor do
     )
   end
 
+  # def remove_tenant(tenant) do
+  #   opts = [tenant: tenant]
+
+  #   DynamicSupervisor.start_child(
+  #     __MODULE__,
+  #     {Bani.Tenant, opts}
+  #   )
+  # end
+
   @impl true
   def init(_init_arg) do
     DynamicSupervisor.init(strategy: :one_for_one)

@@ -10,6 +10,13 @@ defmodule Bani do
         Bani.Application.start(__MODULE__, opts)
       end
 
+      def bootstrap() do
+        Bani.Store.TenantStore.list_tenant_ids()
+        |> Enum.each(fn tenant ->
+          Bani.TenantDynamicSupervisor.add_tenant(tenant)
+        end)
+      end
+
       def add_tenant(tenant, conn_opts) do
         # add tenant to store
         # add tenant to supervisor, bind to store

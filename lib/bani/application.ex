@@ -20,13 +20,6 @@ defmodule Bani.Application do
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Bani.Supervisor]
-    res = Supervisor.start_link(children, opts)
-
-    # TODO: cleanup
-    Enum.each(Bani.Store.TenantStore.list_tenant_ids(), fn tenant ->
-      Bani.TenantDynamicSupervisor.add_tenant(tenant)
-    end)
-
-    res
+    Supervisor.start_link(children, opts)
   end
 end
