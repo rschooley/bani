@@ -5,12 +5,20 @@ defmodule Bani.Tenant do
 
   def start_link(opts) do
     init_state = %{
-      conn_opts: Keyword.fetch!(opts, :conn_opts),
       scheduling: Keyword.get(opts, :scheduling, Bani.Scheduling),
+      store: Keyword.get(opts, :store, Bani.Store.TenantStore),
       tenant: Keyword.fetch!(opts, :tenant)
     }
 
     GenServer.start_link(__MODULE__, init_state, name: via_tuple(init_state.tenant))
+  end
+
+  def init_stores(tenant) do
+    GenServer.call(via_tuple(tenant), :init_stores)
+  end
+
+  def delete_stores(tenant) do
+    GenServer.call(via_tuple(tenant), {:delete_stores})
   end
 
   def create_stream(tenant, stream_name) do
@@ -37,10 +45,6 @@ defmodule Bani.Tenant do
     GenServer.call(via_tuple(tenant), {:delete_subscriber, stream_name, subscription_name})
   end
 
-  def delete_data(tenant) do
-    GenServer.call(via_tuple(tenant), {:delete_data})
-  end
-
   defp via_tuple(tenant) do
     name = Bani.KeyRing.tenant_name(tenant)
 
@@ -51,11 +55,27 @@ defmodule Bani.Tenant do
 
   @impl true
   def init(state) do
-    :ok = Bani.Store.TenantStore.add_tenant(state.tenant)
+    {:ok, %Bani.Store.TenantState{conn_opts: conn_opts}} = state.store.get_tenant(state.tenant)
+
+    new_state = Map.put(state, :conn_opts, conn_opts)
+
+    {:ok, new_state}
+  end
+
+  @impl true
+  def handle_call(:init_stores, _from, state) do
     :ok = Bani.Store.SchedulingStore.init_store(state.tenant)
     :ok = Bani.Store.SubscriberStore.init_store(state.tenant)
 
-    {:ok, state}
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:delete_stores}, _from, state) do
+    :ok = Bani.Store.SchedulingStore.delete_store(state.tenant)
+    :ok = Bani.Store.SubscriberStore.delete_store(state.tenant)
+
+    {:reply, :ok, state}
   end
 
   @impl true
@@ -96,15 +116,6 @@ defmodule Bani.Tenant do
   @impl true
   def handle_call({:delete_subscriber, stream_name, subscription_name}, _from, state) do
     :ok = state.scheduling.delete_subscriber(state.tenant, stream_name, subscription_name)
-
-    {:reply, :ok, state}
-  end
-
-  @impl true
-  def handle_call({:delete_data}, _from, state) do
-    :ok = Bani.Store.TenantStore.remove_tenant(state.tenant)
-    :ok = Bani.Store.SchedulingStore.delete_store(state.tenant)
-    :ok = Bani.Store.SubscriberStore.delete_store(state.tenant)
 
     {:reply, :ok, state}
   end

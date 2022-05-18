@@ -1,0 +1,7 @@
+Mox.defmock(Bani.MockBroker, for: Bani.BrokerBehaviour)
+Mox.defmock(Bani.MockConnectionManager, for: Bani.ConnectionManagerBehaviour)
+Mox.defmock(Bani.MockMessageProcessor, for: Bani.MessageProcessorBehaviour)
+Mox.defmock(Bani.MockScheduling, for: Bani.SchedulingBehaviour)
+Mox.defmock(Bani.MockSubscriberStore, for: Bani.Store.SubscriberStoreBehaviour)
+Mox.defmock(Bani.MockSubscriberStrategy, for: Bani.SubscriberStrategyBehaviour)
+Mox.defmock(Bani.MockTenantStore, for: Bani.Store.TenantStoreBehaviour)

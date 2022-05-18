@@ -6,16 +6,51 @@ defmodule Bani.TenantTest do
   setup [:set_mox_global, :verify_on_exit!]
 
   test "initializes" do
+    test_pid = self()
+    ref = make_ref()
+
     conn_opts = [a: "a"]
     tenant = "some tenant"
 
     opts = [
-      conn_opts: conn_opts,
       scheduling: Bani.MockScheduling,
+      store: Bani.MockTenantStore,
       tenant: tenant
     ]
 
+    expect(Bani.MockTenantStore, :get_tenant, fn (tenant_) ->
+      assert tenant_ == tenant
+
+      Process.send(test_pid, {:expect_called, ref}, [])
+
+      {:ok, %Bani.Store.TenantState{conn_opts: conn_opts}}
+    end)
+
     start_supervised!({Bani.Tenant, opts})
+
+    assert_receive {:expect_called, ^ref}
+  end
+
+  test "inits and deletes stores" do
+    # TODO: the tenant genserver will be in the cluster
+    #  but the SchedulingStore & SubscriberStore will be per node
+    conn_opts = [a: "a"]
+    tenant = "some tenant"
+
+    opts = [
+      scheduling: Bani.MockScheduling,
+      store: Bani.MockTenantStore,
+      tenant: tenant
+    ]
+
+    stub(Bani.MockTenantStore, :get_tenant, fn (_) ->
+      {:ok, %Bani.Store.TenantState{conn_opts: conn_opts}}
+    end)
+
+    start_supervised!({Bani.Tenant, opts})
+
+    assert :ok = Bani.Tenant.init_stores(tenant)
+    assert :ok = Bani.Tenant.delete_stores(tenant)
   end
 
   test "creates and deletes stream" do
@@ -27,10 +62,14 @@ defmodule Bani.TenantTest do
     tenant = "some tenant"
 
     opts = [
-      conn_opts: conn_opts,
       scheduling: Bani.MockScheduling,
+      store: Bani.MockTenantStore,
       tenant: tenant
     ]
+
+    stub(Bani.MockTenantStore, :get_tenant, fn (_) ->
+      {:ok, %Bani.Store.TenantState{conn_opts: conn_opts}}
+    end)
 
     expect(Bani.MockScheduling, :create_stream, fn (conn_opts_, stream_name_) ->
       assert conn_opts_ == conn_opts
@@ -68,10 +107,14 @@ defmodule Bani.TenantTest do
     tenant = "some tenant"
 
     opts = [
-      conn_opts: conn_opts,
       scheduling: Bani.MockScheduling,
+      store: Bani.MockTenantStore,
       tenant: tenant
     ]
+
+    stub(Bani.MockTenantStore, :get_tenant, fn (_) ->
+      {:ok, %Bani.Store.TenantState{conn_opts: conn_opts}}
+    end)
 
     expect(Bani.MockScheduling, :create_publisher, fn (tenant_, conn_opts_, stream_name_) ->
       assert tenant_ == tenant
@@ -115,10 +158,14 @@ defmodule Bani.TenantTest do
     acc = %{}
 
     opts = [
-      conn_opts: conn_opts,
       scheduling: Bani.MockScheduling,
+      store: Bani.MockTenantStore,
       tenant: tenant
     ]
+
+    stub(Bani.MockTenantStore, :get_tenant, fn (_) ->
+      {:ok, %Bani.Store.TenantState{conn_opts: conn_opts}}
+    end)
 
     expect(Bani.MockScheduling, :create_subscriber, fn (tenant_, conn_opts_, stream_name_, subscription_name_, handler_, acc_, offset_) ->
       assert tenant_ == tenant

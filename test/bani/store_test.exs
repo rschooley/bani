@@ -57,6 +57,12 @@ defmodule Bani.StoreTest do
                TenantStore.get_tenant("tenant-1")
     end
 
+    test "get_tenant/1 returns error when tenant does not exist" do
+      :ok = TenantStore.init_store()
+
+      assert {:error, _} = TenantStore.get_tenant("tenant-1")
+    end
+
     test "add_tenant/1 can be called multiple times" do
       :ok = TenantStore.init_store()
       :ok = TenantStore.add_tenant("tenant-1", [])
@@ -67,7 +73,14 @@ defmodule Bani.StoreTest do
   end
 
   describe "subscriber store" do
-    test "add_subscriber/4 & get_subscriber/2 stores & retrieves subscriber correctly" do
+    test "add_subscriber/4 adds the subscriber record" do
+      assert :ok = SubscriberStore.init_store("tenant-1")
+      assert :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", nil, 0)
+
+      assert :ok = SubscriberStore.delete_store("tenant-1")
+    end
+
+    test "get_subscriber/2 returns the subscriber record" do
       assert :ok = SubscriberStore.init_store("tenant-1")
       assert :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", nil, 0)
 
@@ -82,11 +95,11 @@ defmodule Bani.StoreTest do
       assert :ok = SubscriberStore.delete_store("tenant-1")
     end
 
-    test "get_subscriber/2 errors when record not found" do
+    test "get_subscriber/2 returns an error when record not found" do
       assert {:error, _} = SubscriberStore.get_subscriber("tenant-21", "subscriber-key-1")
     end
 
-    test "lock_subscriber/2 updates subscriber record" do
+    test "lock_subscriber/2 updates the subscriber record" do
       :ok = SubscriberStore.init_store("tenant-1")
       :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", %{a: :b}, 0)
 
@@ -111,7 +124,7 @@ defmodule Bani.StoreTest do
       assert :ok = SubscriberStore.delete_store("tenant-1")
     end
 
-    test "lock_subscriber/2 errors when called on locked record" do
+    test "lock_subscriber/2 returns an error when called on locked record" do
       :ok = SubscriberStore.init_store("tenant-1")
       :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", %{a: :b}, 0)
 
@@ -129,11 +142,11 @@ defmodule Bani.StoreTest do
       assert :ok = SubscriberStore.delete_store("tenant-1")
     end
 
-    test "lock_subscriber/2 errors when called on missing tenant" do
+    test "lock_subscriber/2 returns an error when called on missing tenant" do
       assert {:error, _} = SubscriberStore.lock_subscriber("tenant-1", "subscriber-key-1")
     end
 
-    test "unlock_subscriber/4 updates subscriber record" do
+    test "unlock_subscriber/4 updates the subscriber" do
       :ok = SubscriberStore.init_store("tenant-1")
       :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", %{a: :b}, 0)
       {:ok, _} = SubscriberStore.lock_subscriber("tenant-1", "subscriber-key-1")
@@ -159,7 +172,7 @@ defmodule Bani.StoreTest do
       assert :ok = SubscriberStore.delete_store("tenant-1")
     end
 
-    test "unlock_subscriber/4 errors when called on unlocked record" do
+    test "unlock_subscriber/4 returns an error when called on unlocked record" do
       :ok = SubscriberStore.init_store("tenant-1")
       :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", %{a: :b}, 0)
 
@@ -178,12 +191,12 @@ defmodule Bani.StoreTest do
       assert :ok = SubscriberStore.delete_store("tenant-1")
     end
 
-    test "unlock_subscriber/4 errors when called on missing tenant" do
+    test "unlock_subscriber/4 returns an error when called on missing tenant" do
       assert {:error, _} =
                SubscriberStore.unlock_subscriber("tenant-1", "subscriber-key-1", nil, 0)
     end
 
-    test "updated_subscriber/4 updates subscriber record" do
+    test "updated_subscriber/4 updates the subscriber record" do
       :ok = SubscriberStore.init_store("tenant-1")
       :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", %{a: :b}, 0)
 
@@ -208,12 +221,12 @@ defmodule Bani.StoreTest do
       assert :ok = SubscriberStore.delete_store("tenant-1")
     end
 
-    test "update_subscriber/4 errors when called on missing tenant" do
+    test "update_subscriber/4 returns an error when called on missing tenant" do
       assert {:error, _} =
                SubscriberStore.update_subscriber("tenant-1", "subscriber-key-1", %{a: :c}, 1)
     end
 
-    test "remove_subscriber/2 removes the tenant" do
+    test "remove_subscriber/2 removes the subscriber record" do
       :ok = SubscriberStore.init_store("tenant-1")
 
       assert :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", %{a: :b}, 0)
@@ -224,7 +237,7 @@ defmodule Bani.StoreTest do
       assert :ok = SubscriberStore.delete_store("tenant-1")
     end
 
-    test "remove_subscriber/2 errors when called on missing subscriber" do
+    test "remove_subscriber/2 returns an error when called on missing subscriber" do
       assert {:error, _} = SubscriberStore.remove_subscriber("tenant-1", "subscriber-key-1")
     end
 
@@ -277,7 +290,7 @@ defmodule Bani.StoreTest do
     end
 
     for pubsub_type <- [:publisher, :subscriber] do
-      test "gets next available #{pubsub_type} opts" do
+      test "next_available_pubsub_opts/2 gets next available #{pubsub_type} opts" do
         pubsub_type = unquote(pubsub_type)
         tenant = "tenant-123"
 
@@ -317,7 +330,7 @@ defmodule Bani.StoreTest do
     end
 
     for pubsub_type <- [:publisher, :subscriber] do
-      test "releases #{pubsub_type} id from available connection" do
+      test "release_available_pubsub_id/4 releases #{pubsub_type} id from available connection" do
         pubsub_type = unquote(pubsub_type)
         tenant = "tenant-123"
 
@@ -379,7 +392,7 @@ defmodule Bani.StoreTest do
     end
 
     for pubsub_type <- [:publisher, :subscriber] do
-      test "releases #{pubsub_type} id from unavailable connection" do
+      test "release_available_pubsub_id/4 releases #{pubsub_type} id from unavailable connection" do
         pubsub_type = unquote(pubsub_type)
         tenant = "tenant-123"
         connection_id = "connection-123"
@@ -404,7 +417,7 @@ defmodule Bani.StoreTest do
     end
 
     for {target, other} <- [{:publisher, :subscriber}, {:subscriber, :publisher}] do
-      test "getting next available & releasing pubsub opts for #{target} & #{other}" do
+      test "next_available_pubsub_opts/2 & release_available_pubsub_id/4 isolates #{target} & #{other}" do
         target = unquote(target)
         other = unquote(other)
 

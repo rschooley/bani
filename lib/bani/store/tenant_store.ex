@@ -54,6 +54,7 @@ defmodule Bani.Store.TenantStore do
     list
   end
 
+  @impl Bani.Store.TenantStoreBehaviour
   def get_tenant(tenant) do
     result =
       :mnesia.transaction(fn ->
@@ -62,6 +63,7 @@ defmodule Bani.Store.TenantStore do
 
     case result do
       {:atomic, [record]} -> {:ok, tenant_tuple_to_struct(record)}
+      {:atomic, []} -> {:error, "not found"}
       {:aborted, reason} -> {:error, reason}
     end
   end

@@ -1,7 +1,7 @@
 defmodule Bani.Scheduling do
   @behaviour Bani.SchedulingBehaviour
 
-  import Logger
+  require Logger
 
   @impl Bani.SchedulingBehaviour
   def create_stream(conn_opts, stream_name) do
@@ -43,6 +43,10 @@ defmodule Bani.Scheduling do
   def create_publisher(tenant, conn_opts, stream_name) do
     {connection_id, publisher_id} = next_available_pubsub_opts(tenant, conn_opts, :publisher)
 
+    publisher_key = Bani.KeyRing.publisher_name(tenant, stream_name)
+
+    # TODO: this is very optimistic
+    # :ok = Bani.Store.SubscriberStore.add_publisher(tenant, publisher_key)
     {:ok, _} = Bani.ConnectionSupervisor.add_publisher(connection_id, tenant, stream_name, publisher_id)
     :ok
   end
@@ -51,7 +55,11 @@ defmodule Bani.Scheduling do
   def delete_publisher(tenant, stream_name) do
     {pid, connection_id, publisher_id} = Bani.Publisher.lookup(tenant, stream_name)
 
+    publisher_key = Bani.KeyRing.publisher_name(tenant, stream_name)
+
+    # TODO: this is very optimistic
     :ok = Bani.ConnectionSupervisor.remove_publisher(connection_id, pid)
+    # :ok = Bani.Store.SubscriberStore.remove_publisher(tenant, publisher_key)
     :ok = Bani.Store.SchedulingStore.release_available_pubsub_id(tenant, connection_id, :publisher, publisher_id)
     :ok
   end

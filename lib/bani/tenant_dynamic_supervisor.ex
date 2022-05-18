@@ -5,8 +5,8 @@ defmodule Bani.TenantDynamicSupervisor do
     DynamicSupervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
   end
 
-  def add_tenant(tenant, conn_opts) do
-    opts = [tenant: tenant, conn_opts: conn_opts]
+  def add_tenant(tenant) do
+    opts = [tenant: tenant]
 
     DynamicSupervisor.start_child(
       __MODULE__,
