@@ -11,11 +11,9 @@ defmodule Bani do
       end
 
       def bootstrap() do
+        # tenant genserver will pick up state from store
         Bani.Store.TenantStore.list_tenant_ids()
         |> Enum.each(&Bani.TenantDynamicSupervisor.add_tenant/1)
-
-          # TODO: each pub/sub in store
-        end)
       end
 
       def add_tenant(tenant, conn_opts) do
