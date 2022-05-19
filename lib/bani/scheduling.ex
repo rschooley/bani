@@ -35,9 +35,6 @@ defmodule Bani.Scheduling do
   @doc """
   Creates a publisher for the tenant.  Will find an existing/create a new connection manager
   under a supervision tree.
-
-  This should be called by a GenServer (Bani.Tenant) to avoid race conditions of
-  the available ids for a connection.
   """
   @impl Bani.SchedulingBehaviour
   def create_publisher(tenant, conn_opts, stream_name) do
@@ -96,7 +93,7 @@ defmodule Bani.Scheduling do
       Logger.info("Bani Scheduling - existing connection id found (#{connection_id}) for tenant #{tenant}")
     else
       Logger.info("Bani Scheduling - existing connection id not found (#{connection_id}) for tenant #{tenant}")
-      {:ok, _} = Bani.ConnectionDynamicSupervisor.add_connection_supervisor(conn_opts, connection_id)
+      {:ok, _} = Bani.ConnectionDynamicSupervisor.add_connection_supervisor(tenant, conn_opts, connection_id)
     end
 
     {connection_id, pubsub_id}

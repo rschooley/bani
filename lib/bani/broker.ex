@@ -21,7 +21,7 @@ defmodule Bani.Broker do
     :lake.delete(conn, stream_name)
   end
 
-  # TODO: offset atom
+  # TODO: offset supports atoms as well (see rabbitmq stream docs)
 
   @impl Bani.BrokerBehaviour
   def subscribe(conn, stream_name, subscription_id, offset \\ 0)

@@ -20,7 +20,7 @@ defmodule Bani.StoreTest do
   describe "tenant store" do
     setup do
       on_exit(fn ->
-        {:atomic, :ok} = :mnesia.delete_table(:tenants)
+        {:atomic, :ok} = :mnesia.clear_table(:tenants)
       end)
     end
 

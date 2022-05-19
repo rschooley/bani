@@ -12,15 +12,13 @@ defmodule Bani do
 
       def bootstrap() do
         Bani.Store.TenantStore.list_tenant_ids()
-        |> Enum.each(fn tenant ->
-          Bani.TenantDynamicSupervisor.add_tenant(tenant)
+        |> Enum.each(&Bani.TenantDynamicSupervisor.add_tenant/1)
+
+          # TODO: each pub/sub in store
         end)
       end
 
       def add_tenant(tenant, conn_opts) do
-        # add tenant to store
-        # add tenant to supervisor, bind to store
-        # add scheduling and subscriber stores for tenant
         :ok = Bani.Store.TenantStore.add_tenant(tenant, conn_opts)
         {:ok, _} = Bani.TenantDynamicSupervisor.add_tenant(tenant)
         :ok = Bani.Tenant.init_stores(tenant)
@@ -28,10 +26,22 @@ defmodule Bani do
         :ok
       end
 
+      @doc """
+      Does not delete streams, vhost, or server.
+      """
       def remove_tenant(tenant) do
-        # TODO: shutdown connection_supervisors
+        :ok =
+          tenant
+          |> Bani.ConnectionSupervisor.select_connection_pids_by_tenant()
+          |> Bani.ConnectionDynamicSupervisor.remove_connection_supervisor()
+
         :ok = Bani.Tenant.delete_stores(tenant)
-        # {:ok, _} = Bani.TenantDynamicSupervisor.remove_tenant(tenant)
+
+        :ok =
+          tenant
+          |> Bani.Tenant.whereis()
+          |> Bani.TenantDynamicSupervisor.remove_tenant()
+
         :ok = Bani.Store.TenantStore.remove_tenant(tenant)
       end
 

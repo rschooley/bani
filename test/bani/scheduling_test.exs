@@ -12,17 +12,6 @@ defmodule Bani.SchedulingTest do
     {:vhost, "/test"}
   ]
 
-  defp cleanup_database() do
-    :stopped = :mnesia.stop()
-    :ok = :mnesia.delete_schema([node()])
-  end
-
-  setup do
-    :ok = Bani.Store.init_database()
-
-    on_exit(fn -> cleanup_database() end)
-  end
-
   test "creates and deletes stream" do
     stream_name = "scheduling-creates-and-deletes-stream"
 

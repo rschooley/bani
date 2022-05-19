@@ -5,6 +5,7 @@ defmodule Bani.ConnectionSupervisor do
 
   def start_link(opts) do
     connection_id = Keyword.fetch!(opts, :connection_id)
+    _tenant = Keyword.fetch!(opts, :tenant)
 
     Supervisor.start_link(__MODULE__, opts, name: via_tuple(connection_id))
   end
@@ -17,6 +18,12 @@ defmodule Bani.ConnectionSupervisor do
       [] -> false
       _ -> true
     end
+  end
+
+  def select_connection_pids_by_tenant(tenant) do
+    value = Bani.KeyRing.tenant_name(tenant)
+
+    Registry.select(Bani.Registry, [{{:"$1", :"$2", :"$3"}, [{:==, :"$3", value}], [:"$2"]}])
   end
 
   def add_publisher(connection_id, tenant, stream_name, publisher_id) do
@@ -105,6 +112,19 @@ defmodule Bani.ConnectionSupervisor do
       {Bani.SubscriberSupervisor, []}
     ]
 
+    :ok = update_value(opts)
+
     Supervisor.init(children, strategy: :one_for_all)
+  end
+
+  defp update_value(opts) do
+    # I don't see a way to set the Registry value for the Supervisor without calling update
+    name = opts |> Keyword.get(:connection_id) |> Bani.KeyRing.connection_name()
+    value = opts |> Keyword.get(:tenant) |> Bani.KeyRing.tenant_name()
+
+    case Registry.update_value(Bani.Registry, name, fn _ -> value end) do
+      :error -> :error
+      _ -> :ok
+    end
   end
 end

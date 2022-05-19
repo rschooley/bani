@@ -40,10 +40,7 @@ defmodule BaniTest do
 
     assert_receive {:expect_called, ^ref}
 
-    :ok = TestBani.delete_subscriber(tenant, stream_name, subscription_name)
-    :ok = TestBani.delete_publisher(tenant, stream_name)
     :ok = TestBani.delete_stream(tenant, stream_name)
-
     :ok = TestBani.remove_tenant(tenant)
   end
 
@@ -121,7 +118,6 @@ defmodule BaniTest do
 
     :ok = TestBani.remove_tenant(tenant_1)
     :ok = TestBani.remove_tenant(tenant_2)
-    :ok = DynamicSupervisor.stop(Bani.TenantDynamicSupervisor)
   end
 
   @tag capture_log: true
@@ -165,7 +161,6 @@ defmodule BaniTest do
     :ok = TestBani.delete_stream(tenant, stream_name)
 
     :ok = TestBani.remove_tenant(tenant)
-    :ok = DynamicSupervisor.stop(Bani.TenantDynamicSupervisor)
   end
 
   @tag capture_log: true
@@ -209,7 +204,6 @@ defmodule BaniTest do
       :ok = TestBani.delete_stream(tenant, stream_name)
 
       :ok = TestBani.remove_tenant(tenant)
-      :ok = DynamicSupervisor.stop(Bani.TenantDynamicSupervisor)
     end)
   end
 end

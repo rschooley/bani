@@ -45,6 +45,10 @@ defmodule Bani.Tenant do
     GenServer.call(via_tuple(tenant), {:delete_subscriber, stream_name, subscription_name})
   end
 
+  def whereis(tenant) when is_binary(tenant) do
+    GenServer.whereis(via_tuple(tenant))
+  end
+
   defp via_tuple(tenant) do
     name = Bani.KeyRing.tenant_name(tenant)
 
