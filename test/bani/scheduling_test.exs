@@ -44,9 +44,9 @@ defmodule Bani.SchedulingTest do
     :ok = Bani.Store.SchedulingStore.init_store(tenant)
     :ok = Bani.Scheduling.create_stream(@conn_opts, stream_name)
 
-    assert :ok = Bani.Scheduling.create_subscriber(tenant, @conn_opts, stream_name, subscription_name, handler, %{}, 0)
-    # assert :ok = Bani.Scheduling.delete_subscriber(tenant, stream_name, subscription_name)
+    assert :ok = Bani.Scheduling.create_subscriber(tenant, @conn_opts, stream_name, subscription_name, handler, %{}, 0, :at_least_once)
+    assert :ok = Bani.Scheduling.delete_subscriber(tenant, stream_name, subscription_name)
 
-    # Bani.Scheduling.delete_stream(@conn_opts, stream_name)
+    Bani.Scheduling.delete_stream(@conn_opts, stream_name)
   end
 end

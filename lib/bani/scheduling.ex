@@ -43,7 +43,7 @@ defmodule Bani.Scheduling do
     publisher_key = Bani.KeyRing.publisher_name(tenant, stream_name)
 
     # TODO: this is very optimistic
-    # :ok = Bani.Store.SubscriberStore.add_publisher(tenant, publisher_key)
+    :ok = Bani.Store.SubscriberStore.add_publisher(tenant, publisher_key)
     {:ok, _} = Bani.ConnectionSupervisor.add_publisher(connection_id, tenant, stream_name, publisher_id)
     :ok
   end
@@ -62,14 +62,27 @@ defmodule Bani.Scheduling do
   end
 
   @impl Bani.SchedulingBehaviour
-  def create_subscriber(tenant, conn_opts, stream_name, subscription_name, handler, acc, offset) do
+  def create_subscriber(tenant, conn_opts, stream_name, subscription_name, handler, acc, offset, strategy) do
     {connection_id, subscription_id} = next_available_pubsub_opts(tenant, conn_opts, :subscriber)
 
     subscriber_key = Bani.KeyRing.subscriber_key(tenant, stream_name, subscription_name)
 
-    # TODO: this is very optimistic
-    :ok = Bani.Store.SubscriberStore.add_subscriber(tenant, subscriber_key, acc, offset)
-    {:ok, _} = Bani.ConnectionSupervisor.add_subscriber(connection_id, tenant, stream_name, subscription_id, subscription_name, handler)
+    subscriber_state = %Bani.Store.SubscriberState{
+      acc: acc,
+      connection_id: connection_id,
+      handler: handler,
+      locked: false,
+      offset: offset,
+      strategy: strategy,
+      stream_name: stream_name,
+      subscriber_key: subscriber_key,
+      subscription_id: subscription_id,
+      subscription_name: subscription_name,
+      tenant: tenant
+    }
+
+    :ok = Bani.Store.SubscriberStore.add_subscriber(tenant, subscriber_key, subscriber_state)
+    {:ok, _} = Bani.ConnectionSupervisor.add_subscriber(connection_id, tenant, stream_name, subscription_id, subscription_name, handler, strategy)
     :ok
   end
 

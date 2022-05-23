@@ -7,8 +7,12 @@ defmodule Bani.KeyRing do
     "connections/#{connection_id}/connection_manager"
   end
 
-  def publisher_name(tenant, stream_name) do
+  def publisher_key(tenant, stream_name) do
     "tenants/#{tenant}/streams/#{stream_name}/publisher"
+  end
+
+  def publisher_name(tenant, stream_name) do
+    publisher_key(tenant, stream_name)
   end
 
   def subscriber_agent_name(tenant, stream_name, subscription_name) do

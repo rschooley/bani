@@ -34,7 +34,7 @@ defmodule BaniTest do
     :ok = TestBani.add_tenant(tenant, @conn_opts)
     :ok = TestBani.create_stream(tenant, stream_name)
     :ok = TestBani.create_publisher(tenant, stream_name)
-    :ok = TestBani.create_subscriber(tenant, stream_name, subscription_name, handler, %{}, 0)
+    :ok = TestBani.create_subscriber(tenant, stream_name, subscription_name, handler, %{}, 0, :exactly_once)
 
     :ok = TestBani.publish(tenant, stream_name, message)
 
@@ -92,9 +92,9 @@ defmodule BaniTest do
     :ok = TestBani.create_publisher(tenant_1, stream_name_2)
     :ok = TestBani.create_publisher(tenant_2, stream_name_3)
 
-    :ok = TestBani.create_subscriber(tenant_1, stream_name_1, "test-sink", handler_1, %{})
-    :ok = TestBani.create_subscriber(tenant_1, stream_name_2, "test-sink", handler_2, %{})
-    :ok = TestBani.create_subscriber(tenant_2, stream_name_3, "test-sink", handler_3, %{})
+    :ok = TestBani.create_subscriber(tenant_1, stream_name_1, "test-sink", handler_1, %{}, 0, :exactly_once)
+    :ok = TestBani.create_subscriber(tenant_1, stream_name_2, "test-sink", handler_2, %{}, 0, :exactly_once)
+    :ok = TestBani.create_subscriber(tenant_2, stream_name_3, "test-sink", handler_3, %{}, 0, :exactly_once)
 
     :ok = TestBani.publish(tenant_1, stream_name_1, message_1)
     :ok = TestBani.publish(tenant_1, stream_name_2, message_2)
@@ -147,8 +147,8 @@ defmodule BaniTest do
     :ok = TestBani.create_stream(tenant, stream_name)
     :ok = TestBani.create_publisher(tenant, stream_name)
 
-    :ok = TestBani.create_subscriber(tenant, stream_name, "test-sink-1", handler_1, %{})
-    :ok = TestBani.create_subscriber(tenant, stream_name, "test-sink-2", handler_2, %{})
+    :ok = TestBani.create_subscriber(tenant, stream_name, "test-sink-1", handler_1, %{}, 0, :exactly_once)
+    :ok = TestBani.create_subscriber(tenant, stream_name, "test-sink-2", handler_2, %{}, 0, :exactly_once)
 
     :ok = TestBani.publish(tenant, stream_name, message)
 
@@ -190,20 +190,17 @@ defmodule BaniTest do
     :ok = TestBani.create_stream(tenant, stream_name)
     :ok = TestBani.create_publisher(tenant, stream_name)
 
+    on_exit(fn ->
+      :ok = TestBani.delete_stream(tenant, stream_name)
+      :ok = TestBani.remove_tenant(tenant)
+    end)
+
     :ok = TestBani.publish(tenant, stream_name, message_1)
     :ok = TestBani.publish(tenant, stream_name, message_2)
     :ok = TestBani.publish(tenant, stream_name, message_3)
 
-    :ok = TestBani.create_subscriber(tenant, stream_name, "test-sink-1", handler, 0, 1)
+    :ok = TestBani.create_subscriber(tenant, stream_name, "test-sink-1", handler, 0, 1, :exactly_once)
 
     assert_receive {:expect_handler_called, ^ref}
-
-    on_exit(fn ->
-      :ok = TestBani.delete_subscriber(tenant, stream_name, "test-sink-1")
-      :ok = TestBani.delete_publisher(tenant, stream_name)
-      :ok = TestBani.delete_stream(tenant, stream_name)
-
-      :ok = TestBani.remove_tenant(tenant)
-    end)
   end
 end

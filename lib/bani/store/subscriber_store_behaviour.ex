@@ -3,6 +3,20 @@ defmodule Bani.Store.SubscriberStoreBehaviour do
 
   @callback delete_store(tenant :: String) :: :ok
 
+  @callback list_keys(
+              tenant :: String.t()
+            ) :: [{type :: atom(), key :: String.t()}]
+
+  @callback add_publisher(
+              tenant :: String.t(),
+              publisher_key :: String.t()
+            ) :: :ok
+
+  @callback remove_publisher(
+              tenant :: String.t(),
+              publisher_key :: String.t()
+            ) :: :ok
+
   @callback add_subscriber(
               tenant :: String.t(),
               subscriber_key :: String.t(),

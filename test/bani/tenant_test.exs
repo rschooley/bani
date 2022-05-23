@@ -32,8 +32,6 @@ defmodule Bani.TenantTest do
   end
 
   test "inits and deletes stores" do
-    # TODO: the tenant genserver will be in the cluster
-    #  but the SchedulingStore & SubscriberStore will be per node
     conn_opts = [a: "a"]
     tenant = "some tenant"
 
@@ -153,6 +151,7 @@ defmodule Bani.TenantTest do
     tenant = "some tenant"
     subscription_name = "some-subscription-name"
     handler = fn (_prev, curr) -> {:ok, curr} end
+    strategy = :strategy
 
     offset = 0
     acc = %{}
@@ -167,12 +166,13 @@ defmodule Bani.TenantTest do
       {:ok, %Bani.Store.TenantState{conn_opts: conn_opts}}
     end)
 
-    expect(Bani.MockScheduling, :create_subscriber, fn (tenant_, conn_opts_, stream_name_, subscription_name_, handler_, acc_, offset_) ->
+    expect(Bani.MockScheduling, :create_subscriber, fn (tenant_, conn_opts_, stream_name_, subscription_name_, handler_, acc_, offset_, strategy_) ->
       assert tenant_ == tenant
       assert conn_opts_ == conn_opts
       assert stream_name_ == stream_name
       assert subscription_name_ == subscription_name
       assert handler_ == handler
+      assert strategy_ == strategy
 
       assert acc_ == acc
       assert offset_ == offset
@@ -194,7 +194,7 @@ defmodule Bani.TenantTest do
 
     start_supervised!({Bani.Tenant, opts})
 
-    assert :ok = Bani.Tenant.create_subscriber(tenant, stream_name, subscription_name, handler, acc, offset)
+    assert :ok = Bani.Tenant.create_subscriber(tenant, stream_name, subscription_name, handler, acc, offset, strategy)
     assert :ok = Bani.Tenant.delete_subscriber(tenant, stream_name, subscription_name)
 
     assert_receive {:expect_create_subscriber_called, ^ref}

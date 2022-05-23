@@ -1,7 +1,7 @@
 defmodule Bani.Store.SubscriberStore do
   @behaviour Bani.Store.SubscriberStoreBehaviour
 
-  alias Bani.Store.SubscriberState
+  alias Bani.Store.{PublisherState, SubscriberState}
 
   @table_attrs [:key, :value]
 
@@ -35,9 +35,48 @@ defmodule Bani.Store.SubscriberStore do
   end
 
   @impl Bani.Store.SubscriberStoreBehaviour
-  def add_subscriber(tenant, subscriber_key, acc, offset) do
+  def list_keys(tenant) do
     table_name = table_name(tenant)
-    state = %SubscriberState{acc: acc, offset: offset, locked: false}
+
+    {:atomic, list} =
+      :mnesia.transaction(fn ->
+        :mnesia.all_keys(table_name)
+      end)
+
+    list
+  end
+
+  @impl Bani.Store.SubscriberStoreBehaviour
+  def add_publisher(tenant, publisher_key) do
+    table_name = table_name(tenant)
+    state = %PublisherState{}
+
+    {:atomic, :ok} =
+      :mnesia.transaction(fn ->
+        :mnesia.write({table_name, {:pub, publisher_key}, state})
+      end)
+
+    :ok
+  end
+
+  @impl Bani.Store.SubscriberStoreBehaviour
+  def remove_publisher(tenant, publisher_key) do
+    table_name = table_name(tenant)
+
+    result =
+      :mnesia.transaction(fn ->
+        :mnesia.delete({table_name, {:pub, publisher_key}})
+      end)
+
+    case result do
+      {:atomic, :ok} -> :ok
+      {:aborted, reason} -> {:error, reason}
+    end
+  end
+
+  @impl Bani.Store.SubscriberStoreBehaviour
+  def add_subscriber(tenant, subscriber_key, state) do
+    table_name = table_name(tenant)
 
     {:atomic, :ok} =
       :mnesia.transaction(fn ->
@@ -72,7 +111,7 @@ defmodule Bani.Store.SubscriberStore do
       end)
 
     case result do
-      {:atomic, [record]} -> {:ok, subscriber_tuple_to_struct(record)}
+      {:atomic, [record]} -> {:ok, record_to_struct(record)}
       {:atomic, []} -> {:error, "not found"}
       {:aborted, reason} -> {:error, reason}
     end
@@ -102,7 +141,7 @@ defmodule Bani.Store.SubscriberStore do
 
     case result do
       {:atomic, :already_locked} -> {:error, :already_locked}
-      {:atomic, record} -> {:ok, subscriber_tuple_to_struct(record)}
+      {:atomic, record} -> {:ok, record_to_struct(record)}
       {:aborted, reason} -> {:error, reason}
     end
   end
@@ -131,7 +170,7 @@ defmodule Bani.Store.SubscriberStore do
 
     case result do
       {:atomic, :already_unlocked} -> {:error, :already_unlocked}
-      {:atomic, record} -> {:ok, subscriber_tuple_to_struct(record)}
+      {:atomic, record} -> {:ok, record_to_struct(record)}
       {:aborted, reason} -> {:error, reason}
     end
   end
@@ -153,7 +192,7 @@ defmodule Bani.Store.SubscriberStore do
       end)
 
     case result do
-      {:atomic, record} -> {:ok, subscriber_tuple_to_struct(record)}
+      {:atomic, record} -> {:ok, record_to_struct(record)}
       {:aborted, reason} -> {:error, reason}
     end
   end
@@ -162,8 +201,8 @@ defmodule Bani.Store.SubscriberStore do
     :"tenants_#{tenant}_subscribers"
   end
 
-  defp subscriber_tuple_to_struct(tuple) when is_tuple(tuple) and tuple_size(tuple) == 3 do
-    {_table, {type, key}, struct} = tuple
+  defp record_to_struct(record) when is_tuple(record) and tuple_size(record) == 3 do
+    {_table, {type, key}, struct} = record
 
     case type do
       :pub -> Map.put(struct, :publisher_key, key)

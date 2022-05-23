@@ -46,7 +46,7 @@ defmodule Bani.ConnectionSupervisor do
     DynamicSupervisor.terminate_child(publisher_supervisor, pid)
   end
 
-  def add_subscriber(connection_id, tenant, stream_name, subscription_id, subscription_name, handler) do
+  def add_subscriber(connection_id, tenant, stream_name, subscription_id, subscription_name, handler, strategy) do
     subscriber_supervisor = child_subscriber_supervisor(connection_id)
 
     DynamicSupervisor.start_child(
@@ -54,6 +54,7 @@ defmodule Bani.ConnectionSupervisor do
       {Bani.Subscriber, [
         connection_id: connection_id,
         handler: handler,
+        strategy: strategy,
         stream_name: stream_name,
         subscription_id: subscription_id,
         subscription_name: subscription_name,

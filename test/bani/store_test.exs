@@ -73,24 +73,36 @@ defmodule Bani.StoreTest do
   end
 
   describe "subscriber store" do
+    @valid_state %SubscriberState{
+      acc: %{},
+      locked: false,
+      offset: 0,
+      subscriber_key: "subscriber-key-1",
+      connection_id: 1,
+      handler: :handler,
+      strategy: :strategy,
+      stream_name: "stream_name-1",
+      subscription_id: 2,
+      subscription_name: "subscription_name",
+      tenant: "tenant-1"
+    }
+
     test "add_subscriber/4 adds the subscriber record" do
       assert :ok = SubscriberStore.init_store("tenant-1")
-      assert :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", nil, 0)
+      assert :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", @valid_state)
 
       assert :ok = SubscriberStore.delete_store("tenant-1")
     end
 
     test "get_subscriber/2 returns the subscriber record" do
       assert :ok = SubscriberStore.init_store("tenant-1")
-      assert :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", nil, 0)
+      assert :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", @valid_state)
 
-      assert {:ok,
-              %SubscriberState{
-                acc: nil,
-                locked: false,
-                offset: 0,
-                subscriber_key: "subscriber-key-1"
-              }} = SubscriberStore.get_subscriber("tenant-1", "subscriber-key-1")
+      assert :ok =
+               SubscriberStore.add_subscriber("tenant-1", "subscriber-key-2", %SubscriberState{})
+
+      state = @valid_state
+      assert {:ok, ^state} = SubscriberStore.get_subscriber("tenant-1", "subscriber-key-1")
 
       assert :ok = SubscriberStore.delete_store("tenant-1")
     end
@@ -100,41 +112,28 @@ defmodule Bani.StoreTest do
     end
 
     test "lock_subscriber/2 updates the subscriber record" do
+      expected_state = %{@valid_state | locked: true}
+
       :ok = SubscriberStore.init_store("tenant-1")
-      :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", %{a: :b}, 0)
+      :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", @valid_state)
 
       # make sure returned value is good
-      assert {:ok,
-              %SubscriberState{
-                acc: %{a: :b},
-                locked: true,
-                offset: 0,
-                subscriber_key: "subscriber-key-1"
-              }} = SubscriberStore.lock_subscriber("tenant-1", "subscriber-key-1")
+      assert {:ok, ^expected_state} =
+               SubscriberStore.lock_subscriber("tenant-1", "subscriber-key-1")
 
       # make sure stored value is good
-      assert {:ok,
-              %SubscriberState{
-                acc: %{a: :b},
-                locked: true,
-                offset: 0,
-                subscriber_key: "subscriber-key-1"
-              }} = SubscriberStore.get_subscriber("tenant-1", "subscriber-key-1")
+      assert {:ok, ^expected_state} =
+               SubscriberStore.get_subscriber("tenant-1", "subscriber-key-1")
 
       assert :ok = SubscriberStore.delete_store("tenant-1")
     end
 
     test "lock_subscriber/2 returns an error when called on locked record" do
       :ok = SubscriberStore.init_store("tenant-1")
-      :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", %{a: :b}, 0)
+      :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", @valid_state)
 
-      assert {:ok,
-              %SubscriberState{
-                acc: %{a: :b},
-                locked: true,
-                offset: 0,
-                subscriber_key: "subscriber-key-1"
-              }} = SubscriberStore.lock_subscriber("tenant-1", "subscriber-key-1")
+      assert {:ok, %SubscriberState{locked: true}} =
+               SubscriberStore.lock_subscriber("tenant-1", "subscriber-key-1")
 
       assert {:error, :already_locked} =
                SubscriberStore.lock_subscriber("tenant-1", "subscriber-key-1")
@@ -148,45 +147,34 @@ defmodule Bani.StoreTest do
 
     test "unlock_subscriber/4 updates the subscriber" do
       :ok = SubscriberStore.init_store("tenant-1")
-      :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", %{a: :b}, 0)
+      :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", @valid_state)
       {:ok, _} = SubscriberStore.lock_subscriber("tenant-1", "subscriber-key-1")
 
+      expected_state = %{@valid_state | acc: %{c: :d}, locked: false, offset: 1}
+
       # make sure returned value is good
-      assert {:ok,
-              %SubscriberState{
-                acc: %{c: :d},
-                locked: false,
-                offset: 1,
-                subscriber_key: "subscriber-key-1"
-              }} = SubscriberStore.unlock_subscriber("tenant-1", "subscriber-key-1", %{c: :d}, 1)
+      assert {:ok, ^expected_state} =
+               SubscriberStore.unlock_subscriber("tenant-1", "subscriber-key-1", %{c: :d}, 1)
 
       # make sure stored value is good
-      assert {:ok,
-              %SubscriberState{
-                acc: %{c: :d},
-                locked: false,
-                offset: 1,
-                subscriber_key: "subscriber-key-1"
-              }} = SubscriberStore.get_subscriber("tenant-1", "subscriber-key-1")
+      assert {:ok, ^expected_state} =
+               SubscriberStore.get_subscriber("tenant-1", "subscriber-key-1")
 
       assert :ok = SubscriberStore.delete_store("tenant-1")
     end
 
     test "unlock_subscriber/4 returns an error when called on unlocked record" do
       :ok = SubscriberStore.init_store("tenant-1")
-      :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", %{a: :b}, 0)
+      :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", @valid_state)
 
       assert {:error, :already_unlocked} =
                SubscriberStore.unlock_subscriber("tenant-1", "subscriber-key-1", %{c: :d}, 1)
 
+      expected_state = %{@valid_state | locked: false}
+
       # make sure stored value is good
-      assert {:ok,
-              %SubscriberState{
-                acc: %{a: :b},
-                locked: false,
-                offset: 0,
-                subscriber_key: "subscriber-key-1"
-              }} = SubscriberStore.get_subscriber("tenant-1", "subscriber-key-1")
+      assert {:ok, ^expected_state} =
+               SubscriberStore.get_subscriber("tenant-1", "subscriber-key-1")
 
       assert :ok = SubscriberStore.delete_store("tenant-1")
     end
@@ -198,25 +186,17 @@ defmodule Bani.StoreTest do
 
     test "updated_subscriber/4 updates the subscriber record" do
       :ok = SubscriberStore.init_store("tenant-1")
-      :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", %{a: :b}, 0)
+      :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", @valid_state)
+
+      expected_state = %{@valid_state | acc: %{a: :c}, offset: 1}
 
       # make sure returned value is good
-      assert {:ok,
-              %SubscriberState{
-                acc: %{a: :c},
-                locked: false,
-                offset: 1,
-                subscriber_key: "subscriber-key-1"
-              }} = SubscriberStore.update_subscriber("tenant-1", "subscriber-key-1", %{a: :c}, 1)
+      assert {:ok, ^expected_state} =
+               SubscriberStore.update_subscriber("tenant-1", "subscriber-key-1", %{a: :c}, 1)
 
       # make sure stored value is good
-      assert {:ok,
-              %SubscriberState{
-                acc: %{a: :c},
-                locked: false,
-                offset: 1,
-                subscriber_key: "subscriber-key-1"
-              }} = SubscriberStore.get_subscriber("tenant-1", "subscriber-key-1")
+      assert {:ok, ^expected_state} =
+               SubscriberStore.get_subscriber("tenant-1", "subscriber-key-1")
 
       assert :ok = SubscriberStore.delete_store("tenant-1")
     end
@@ -229,7 +209,7 @@ defmodule Bani.StoreTest do
     test "remove_subscriber/2 removes the subscriber record" do
       :ok = SubscriberStore.init_store("tenant-1")
 
-      assert :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", %{a: :b}, 0)
+      assert :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", @valid_state)
       assert :ok = SubscriberStore.remove_subscriber("tenant-1", "subscriber-key-1")
 
       assert {:error, _} = SubscriberStore.get_subscriber("tenant-1", "subscriber-key-1")
@@ -243,26 +223,24 @@ defmodule Bani.StoreTest do
 
     test "isolates tenant subscribers" do
       assert :ok = SubscriberStore.init_store("tenant-1")
-      assert :ok = SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", "a", 1)
+
+      assert :ok =
+               SubscriberStore.add_subscriber("tenant-1", "subscriber-key-1", %SubscriberState{
+                 tenant: "tenant-1"
+               })
 
       assert :ok = SubscriberStore.init_store("tenant-2")
-      assert :ok = SubscriberStore.add_subscriber("tenant-2", "subscriber-key-1", "b", 2)
 
-      assert {:ok,
-              %SubscriberState{
-                acc: "a",
-                locked: false,
-                offset: 1,
-                subscriber_key: "subscriber-key-1"
-              }} = SubscriberStore.get_subscriber("tenant-1", "subscriber-key-1")
+      assert :ok =
+               SubscriberStore.add_subscriber("tenant-2", "subscriber-key-1", %SubscriberState{
+                 tenant: "tenant-2"
+               })
 
-      assert {:ok,
-              %SubscriberState{
-                acc: "b",
-                locked: false,
-                offset: 2,
-                subscriber_key: "subscriber-key-1"
-              }} = SubscriberStore.get_subscriber("tenant-2", "subscriber-key-1")
+      assert {:ok, %SubscriberState{tenant: "tenant-1"}} =
+               SubscriberStore.get_subscriber("tenant-1", "subscriber-key-1")
+
+      assert {:ok, %SubscriberState{tenant: "tenant-2"}} =
+               SubscriberStore.get_subscriber("tenant-2", "subscriber-key-1")
 
       assert :ok = SubscriberStore.delete_store("tenant-1")
       assert :ok = SubscriberStore.delete_store("tenant-2")
@@ -277,6 +255,11 @@ defmodule Bani.StoreTest do
       assert :ok = SchedulingStore.init_store(tenant_1)
       assert :ok = SchedulingStore.init_store(tenant_2)
 
+      on_exit(fn ->
+        :ok = SchedulingStore.delete_store(tenant_1)
+        :ok = SchedulingStore.delete_store(tenant_2)
+      end)
+
       assert {:ok, {connection_id_1, 0}} =
                SchedulingStore.next_available_pubsub_opts(tenant_1, :publisher)
 
@@ -284,9 +267,6 @@ defmodule Bani.StoreTest do
                SchedulingStore.next_available_pubsub_opts(tenant_2, :publisher)
 
       assert connection_id_1 != connection_id_2
-
-      assert :ok = SchedulingStore.delete_store(tenant_1)
-      assert :ok = SchedulingStore.delete_store(tenant_2)
     end
 
     for pubsub_type <- [:publisher, :subscriber] do
@@ -295,6 +275,10 @@ defmodule Bani.StoreTest do
         tenant = "tenant-123"
 
         assert :ok = SchedulingStore.init_store(tenant)
+
+        on_exit(fn ->
+          :ok = SchedulingStore.delete_store(tenant)
+        end)
 
         assert {:ok, {connection_id_1, 0}} =
                  SchedulingStore.next_available_pubsub_opts(tenant, pubsub_type)
@@ -324,8 +308,6 @@ defmodule Bani.StoreTest do
                  SchedulingStore.next_available_pubsub_opts(tenant, pubsub_type)
 
         assert connection_id_1 != connection_id_2 != connection_id_3
-
-        assert :ok = SchedulingStore.delete_store(tenant)
       end
     end
 
@@ -335,6 +317,10 @@ defmodule Bani.StoreTest do
         tenant = "tenant-123"
 
         assert :ok = SchedulingStore.init_store(tenant)
+
+        on_exit(fn ->
+          :ok = SchedulingStore.delete_store(tenant)
+        end)
 
         assert {:ok, {connection_id, 0}} =
                  SchedulingStore.next_available_pubsub_opts(tenant, pubsub_type)
@@ -386,8 +372,6 @@ defmodule Bani.StoreTest do
 
         assert {:ok, {^connection_id, 3}} =
                  SchedulingStore.next_available_pubsub_opts(tenant, pubsub_type)
-
-        assert :ok = SchedulingStore.delete_store(tenant)
       end
     end
 
@@ -398,6 +382,10 @@ defmodule Bani.StoreTest do
         connection_id = "connection-123"
 
         assert :ok = SchedulingStore.init_store(tenant)
+
+        on_exit(fn ->
+          :ok = SchedulingStore.delete_store(tenant)
+        end)
 
         # releasing from a connection not in the available table (all ids have been taken)
         assert :ok =
@@ -411,8 +399,6 @@ defmodule Bani.StoreTest do
         # next id uses that released id instead of creating a new connection id
         assert {:ok, {^connection_id, 11}} =
                  SchedulingStore.next_available_pubsub_opts(tenant, pubsub_type)
-
-        assert :ok = SchedulingStore.delete_store(tenant)
       end
     end
 
@@ -424,6 +410,10 @@ defmodule Bani.StoreTest do
         tenant = "tenant-123"
 
         assert :ok = SchedulingStore.init_store(tenant)
+
+        on_exit(fn ->
+          :ok = SchedulingStore.delete_store(tenant)
+        end)
 
         # weave next available and releasing across pub sub types
         assert {:ok, {connection_id_1, 0}} =
@@ -449,8 +439,6 @@ defmodule Bani.StoreTest do
 
         assert {:ok, {^connection_id_1, 1}} =
                  SchedulingStore.next_available_pubsub_opts(tenant, target)
-
-        assert :ok = SchedulingStore.delete_store(tenant)
       end
     end
   end
