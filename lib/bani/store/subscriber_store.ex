@@ -1,8 +1,6 @@
 defmodule Bani.Store.SubscriberStore do
   @behaviour Bani.Store.SubscriberStoreBehaviour
 
-  alias Bani.Store.{PublisherState, SubscriberState}
-
   @table_attrs [:key, :value]
 
   @impl Bani.Store.SubscriberStoreBehaviour
@@ -47,9 +45,8 @@ defmodule Bani.Store.SubscriberStore do
   end
 
   @impl Bani.Store.SubscriberStoreBehaviour
-  def add_publisher(tenant, publisher_key) do
+  def add_publisher(tenant, publisher_key, state) do
     table_name = table_name(tenant)
-    state = %PublisherState{}
 
     {:atomic, :ok} =
       :mnesia.transaction(fn ->
@@ -70,6 +67,22 @@ defmodule Bani.Store.SubscriberStore do
 
     case result do
       {:atomic, :ok} -> :ok
+      {:aborted, reason} -> {:error, reason}
+    end
+  end
+
+  @impl Bani.Store.SubscriberStoreBehaviour
+  def get_publisher(tenant, publisher_key) do
+    table_name = table_name(tenant)
+
+    result =
+      :mnesia.transaction(fn ->
+        :mnesia.read({table_name, {:sub, publisher_key}})
+      end)
+
+    case result do
+      {:atomic, [record]} -> {:ok, record_to_struct(record)}
+      {:atomic, []} -> {:error, "not found"}
       {:aborted, reason} -> {:error, reason}
     end
   end

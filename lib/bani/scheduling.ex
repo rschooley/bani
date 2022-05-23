@@ -42,8 +42,15 @@ defmodule Bani.Scheduling do
 
     publisher_key = Bani.KeyRing.publisher_name(tenant, stream_name)
 
-    # TODO: this is very optimistic
-    :ok = Bani.Store.SubscriberStore.add_publisher(tenant, publisher_key)
+    publisher_state = %Bani.Store.PublisherState{
+      publisher_key: publisher_key,
+      stream_name: stream_name,
+      tenant: tenant,
+      connection_id: connection_id,
+      publisher_id: publisher_id
+    }
+
+    :ok = Bani.Store.SubscriberStore.add_publisher(tenant, publisher_key, publisher_state)
     {:ok, _} = Bani.ConnectionSupervisor.add_publisher(connection_id, tenant, stream_name, publisher_id)
     :ok
   end
@@ -54,9 +61,8 @@ defmodule Bani.Scheduling do
 
     publisher_key = Bani.KeyRing.publisher_name(tenant, stream_name)
 
-    # TODO: this is very optimistic
     :ok = Bani.ConnectionSupervisor.remove_publisher(connection_id, pid)
-    # :ok = Bani.Store.SubscriberStore.remove_publisher(tenant, publisher_key)
+    :ok = Bani.Store.SubscriberStore.remove_publisher(tenant, publisher_key)
     :ok = Bani.Store.SchedulingStore.release_available_pubsub_id(tenant, connection_id, :publisher, publisher_id)
     :ok
   end
@@ -92,7 +98,6 @@ defmodule Bani.Scheduling do
 
     subscriber_key = Bani.KeyRing.subscriber_key(tenant, stream_name, subscription_name)
 
-    # TODO: this is very optimistic
     :ok = Bani.ConnectionSupervisor.remove_subscriber(connection_id, pid)
     :ok = Bani.Store.SubscriberStore.remove_subscriber(tenant, subscriber_key)
     :ok = Bani.Store.SchedulingStore.release_available_pubsub_id(tenant, connection_id, :subscriber, subscription_id)

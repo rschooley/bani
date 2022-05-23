@@ -24,6 +24,7 @@ defmodule Bani.SchedulingTest do
     stream_name = "scheduling-creates-and-deletes-publisher"
 
     # Scheduling is made to back the Tenant GenServer which inits the store(s)
+    :ok = Bani.Store.SubscriberStore.init_store(tenant)
     :ok = Bani.Store.SchedulingStore.init_store(tenant)
     :ok = Bani.Scheduling.create_stream(@conn_opts, stream_name)
 

@@ -9,7 +9,8 @@ defmodule Bani.Store.SubscriberStoreBehaviour do
 
   @callback add_publisher(
               tenant :: String.t(),
-              publisher_key :: String.t()
+              publisher_key :: String.t(),
+              state :: term()
             ) :: :ok
 
   @callback remove_publisher(
@@ -17,11 +18,17 @@ defmodule Bani.Store.SubscriberStoreBehaviour do
               publisher_key :: String.t()
             ) :: :ok
 
+  @callback get_publisher(
+              tenant :: String.t(),
+              publisher_key :: String.t()
+            ) :: {
+              {:ok, publisher_state :: term()} | {:error, term()}
+            }
+
   @callback add_subscriber(
               tenant :: String.t(),
               subscriber_key :: String.t(),
-              acc :: term(),
-              offset :: Integer.t()
+              state :: term()
             ) :: :ok
 
   @callback remove_subscriber(
