@@ -45,7 +45,7 @@ defmodule BaniTest do
   end
 
   @tag capture_log: true
-  test "creates multiple streams and subscribtions" do
+  test "creates multiple streams and subscriptions" do
     test_pid = self()
     ref = make_ref()
 
@@ -121,7 +121,7 @@ defmodule BaniTest do
   end
 
   @tag capture_log: true
-  test "creates multiple subscribtions for single stream" do
+  test "creates multiple subscriptions for single stream" do
     test_pid = self()
     ref = make_ref()
 

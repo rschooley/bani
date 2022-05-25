@@ -6,6 +6,8 @@ defmodule Bani do
   @doc false
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts] do
+      require Logger
+
       def start_link(opts \\ []) do
         Bani.Application.start(__MODULE__, opts)
       end
@@ -14,20 +16,32 @@ defmodule Bani do
         # genservers will pick up state from their stores
         Bani.Store.TenantStore.list_tenant_ids()
         |> Enum.each(fn tenant ->
-          :ok = Bani.TenantDynamicSupervisor.add_tenant(tenant)
+          {:ok, _} = Bani.TenantDynamicSupervisor.add_tenant(tenant)
+          Logger.info("Bani: tenant_#{tenant} supervisor bootstrapped")
 
           # TODO:
           # this can be in parallel
           # don't do this, read each record until $end
+          Bani.Store.SubscriberStore.init_store(tenant)
+          Bani.Store.SchedulingStore.init_store(tenant)
+
+          {:ok, tenant_state} = Bani.Store.TenantStore.get_tenant(tenant)
+
           Bani.Store.SubscriberStore.list_keys(tenant)
           |> Enum.each(fn key ->
-            {:ok, _} = bootstrap_pubsub(tenant, key)
+            {:ok, _} = bootstrap_pubsub(tenant_state, key)
+            [pubsub_type, pubsub_key] = Tuple.to_list(key)
+            Logger.info("Bani: tenant_#{tenant} #{pubsub_type}_#{pubsub_key} bootstrapped")
           end)
         end)
       end
 
-      defp bootstrap_pubsub(tenant, {:pub, publisher_key}) do
-        state = Bani.Store.SubscriberStore.get_publisher(tenant, publisher_key)
+      defp bootstrap_pubsub(%{id: tenant, conn_opts: conn_opts}, {:pub, publisher_key}) do
+        {:ok, state} = Bani.Store.SubscriberStore.get_publisher(tenant, publisher_key)
+
+        unless Bani.ConnectionSupervisor.exists?(state.connection_id) do
+          Bani.ConnectionDynamicSupervisor.add_connection_supervisor(tenant, conn_opts, state.connection_id)
+        end
 
         Bani.ConnectionSupervisor.add_publisher(
           state.connection_id,
@@ -37,8 +51,12 @@ defmodule Bani do
         )
       end
 
-      defp bootstrap_pubsub(tenant, {:sub, subscriber_key}) do
-        state = Bani.Store.SubscriberStore.get_subscriber(tenant, subscriber_key)
+      defp bootstrap_pubsub(%{id: tenant, conn_opts: conn_opts}, {:sub, subscriber_key}) do
+        {:ok, state} = Bani.Store.SubscriberStore.get_subscriber(tenant, subscriber_key)
+
+        unless Bani.ConnectionSupervisor.exists?(state.connection_id) do
+          Bani.ConnectionDynamicSupervisor.add_connection_supervisor(tenant, conn_opts, state.connection_id)
+        end
 
         Bani.ConnectionSupervisor.add_subscriber(
           state.connection_id,

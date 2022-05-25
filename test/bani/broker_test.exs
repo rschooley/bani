@@ -51,6 +51,41 @@ defmodule Bani.BrokerTest do
     :ok = Broker.disconnect(conn)
   end
 
+  test "subscribes to offset in middle of stream" do
+    stream_name = "subscribes-and-publishes-to-a-stream"
+    # messages = ["a", "b", "c"]
+    # message_payload = Enum.zip(0..3, messages)
+
+    {:ok, conn} = Broker.connect(@host, @port, @username, @password, @vhost)
+    :ok = Broker.create_stream(conn, stream_name)
+    :ok = Broker.create_publisher(conn, stream_name, 10, "some-publisher")
+    # publishing a list here will yield all messages
+    # regardless of the offset in subscriber
+    # might be a lake or rabbit bug / feature
+    # :ok = Broker.publish(conn, 10, message_payload)
+    :ok = Broker.publish(conn, 10, [{0, "a"}])
+    :ok = Broker.publish(conn, 10, [{1, "b"}])
+    :ok = Broker.publish(conn, 10, [{2, "c"}])
+
+    :ok = Broker.subscribe(conn, stream_name, 1, 1)
+
+    {:ok, {results, _other}} =
+      receive do
+        {:deliver, _response_code, chunk} ->
+          Broker.chunk_to_messages(chunk)
+      after
+        5000 ->
+          exit(:timeout)
+      end
+
+    assert ["b"] == results
+
+    :ok = Broker.delete_publisher(conn, 10)
+    :ok = Broker.unsubscribe(conn, 1)
+    :ok = Broker.delete_stream(conn, stream_name)
+    :ok = Broker.disconnect(conn)
+  end
+
   test "supports multiple stream subscribers" do
     stream_1 = "supports-multiple-stream-subscribers-1"
     stream_2 = "supports-multiple-stream-subscribers-2"

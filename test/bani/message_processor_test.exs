@@ -41,7 +41,7 @@ defmodule Bani.MessageProcessorTest do
     end
 
     assert capture_log(fn ->
-             assert {:partial_error, %{value: 1}, 1} =
+             assert {:partial_error, _err, %{value: 1}, 1} =
                       Bani.MessageProcessor.process(parser_fn, handler_fn, "some chunk", %{
                         value: 0
                       })

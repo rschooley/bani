@@ -77,7 +77,7 @@ defmodule Bani.Store.SubscriberStore do
 
     result =
       :mnesia.transaction(fn ->
-        :mnesia.read({table_name, {:sub, publisher_key}})
+        :mnesia.read({table_name, {:pub, publisher_key}})
       end)
 
     case result do

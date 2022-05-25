@@ -71,50 +71,80 @@ defmodule Bani.SubscriberStrategy do
   """
   @impl Bani.SubscriberStrategyBehaviour
   def perform(:exactly_once, tenant, subscriber_key, store, process_fn) do
-    with {:ok, %SubscriberState{acc: acc}} <- store.lock_subscriber(tenant, subscriber_key),
-         {process_status, new_acc, inc_count} <- process_fn.(acc),
-         {unlock_status, unlock_response} <- store.unlock_subscriber(tenant, subscriber_key, new_acc, inc_count)
-    do
-      cond do
-        process_status == :ok && unlock_status == :ok ->
-          {:ok, unlock_response}
+    store.lock_subscriber(tenant, subscriber_key)
+    |> call_process_fn(process_fn, tenant, subscriber_key)
+    |> unlock_store(tenant, subscriber_key, store)
+    |> log_error(tenant, subscriber_key)
+  end
 
-        unlock_status == :error ->
-          message = "Bani: could not unlock exactly_once subscriber #{subscriber_key}"
-          Logger.error(Exception.format(:error, unlock_response))
-          Logger.error(message)
+  # def perform(:at_least_once, tenant, subscriber_key, store, process_fn) do
+  #   store.get_subscriber(tenant, subscriber_key)
+  #   |> call_process_fn(process_fn, tenant, subscriber_key)
+  #   |> update_store(tenant, subscriber_key, store)
+  #   |> log_error(tenant, subscriber_key)
+  # end
 
-          {:error, message}
+  defp call_process_fn({:ok, %SubscriberState{acc: acc}}, process_fn, _tenant, _subscriber_key) do
+    process_fn.(acc)
+  end
 
-        process_status == :partial_error ->
-          # process_fn has already logged the error
-          {:error, "Bani: process fn had partial error in exactly_once subscriber #{subscriber_key}"}
-      end
-    else
-      err -> err
+  defp call_process_fn({:error, error}, _process_fn, tenant, subscriber_key) do
+    {:error,
+     %Bani.SubscriberDeliverError{
+       reason: :store_lock_failed,
+       inner_error: error,
+       subscriber_key: subscriber_key,
+       tenant: tenant
+     }}
+  end
+
+  defp unlock_store({:ok, new_acc, inc_count}, tenant, subscriber_key, store) do
+    store.unlock_subscriber(tenant, subscriber_key, new_acc, inc_count)
+  end
+
+  defp unlock_store({:partial_error, error, new_acc, inc_count}, tenant, subscriber_key, store) do
+    # update and don't unlock
+    #  new acc and inc count are last successful values
+    new_error = %Bani.SubscriberDeliverError{
+      subscriber_key: subscriber_key,
+      tenant: tenant,
+      extra: %{
+        new_acc: new_acc,
+        inc_count: inc_count
+      }
+    }
+
+    case store.update_subscriber(tenant, subscriber_key, new_acc, inc_count) do
+      {:ok, _} ->
+        {:error, %{new_error | reason: :handler_partial_error, inner_error: error}}
+
+      {:error, update_error} ->
+        {:error, %{new_error | reason: :store_update_failed_after_partial_handler_failed, inner_error: update_error}}
     end
   end
 
-  def perform(:at_least_once, tenant, subscriber_key, store, process_fn) do
-    with {:ok, %SubscriberState{acc: acc}} <- store.get_subscriber(tenant, subscriber_key),
-         {process_status, new_acc, inc_count} <- process_fn.(acc),
-         {update_status, update_response} <- store.update_subscriber(tenant, subscriber_key, new_acc, inc_count)
-    do
-      cond do
-        process_status == :ok && update_status == :ok ->
-          {:ok, update_response}
+  defp unlock_store({:error, %Bani.SubscriberDeliverError{} = error}, _, _, _) do
+    {:error, error}
+  end
 
-        update_status == :error ->
-          message = "Bani: could not update at_least_once subscriber #{subscriber_key}"
-          Logger.error(Exception.format(:error, update_response))
-          Logger.error(message)
+  defp log_error({:ok, result}, _, _) do
+    {:ok, result}
+  end
 
-          {:error, message}
+  defp log_error({:error, %Bani.SubscriberDeliverError{} = error}, _, _) do
+    Logger.error(Exception.message(error))
 
-        process_status == :partial_error ->
-          # process_fn has already logged the error
-          {:error, "Bani: process fn had partial error in at_least_once subscriber #{subscriber_key}"}
-      end
-    end
+    {:error, error}
+  end
+
+  defp log_error({:error, error}, tenant, subscriber_key) do
+    new_error = %Bani.SubscriberDeliverError{
+      reason: :store_unlock_failed,
+      inner_error: error,
+      subscriber_key: subscriber_key,
+      tenant: tenant
+    }
+
+    log_error({:error, new_error}, tenant, subscriber_key)
   end
 end

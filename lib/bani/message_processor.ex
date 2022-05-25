@@ -7,8 +7,8 @@ defmodule Bani.MessageProcessor do
   def process(parser_fn, handler_fn, chunk, initial_acc) do
     {:ok, {messages, _metadata}} = parser_fn.(chunk)
 
-    {new_acc, success_count} =
-      Enum.reduce_while(messages, {initial_acc, 0}, fn message, {acc, success_count} ->
+    {err, new_acc, success_count} =
+      Enum.reduce_while(messages, {nil, initial_acc, 0}, fn message, {new_err, acc, success_count} ->
         # handler is from the calling application
         #  and could raise all sorts of errors
         #  partial success for batch of multiple messages allowed
@@ -19,21 +19,22 @@ defmodule Bani.MessageProcessor do
           #  and return the latest success count
           {:ok, new_acc} = handler_fn.(acc, message)
 
-          {:cont, {new_acc, success_count + 1}}
+          {:cont, {nil, new_acc, success_count + 1}}
         rescue
           err ->
             Logger.error(Exception.format(:error, err, __STACKTRACE__))
 
-            {:halt, {acc, success_count}}
+            # return the err and the last good acc
+            {:halt, {err, acc, success_count}}
         end
       end)
 
     cond do
-      length(messages) == success_count ->
-        {:ok, new_acc, success_count}
+      err ->
+        {:partial_error, err, new_acc, success_count}
 
       true ->
-        {:partial_error, new_acc, success_count}
+        {:ok, new_acc, success_count}
     end
   end
 end

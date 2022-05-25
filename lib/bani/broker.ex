@@ -50,7 +50,10 @@ defmodule Bani.Broker do
   def publish(conn, publisher_id, messages)
       when is_pid(conn) and is_integer(publisher_id) and is_list(messages) do
     # TODO: verify published_id
-    [{_published_id, :ok}] = :lake.publish_sync(conn, publisher_id, messages)
+    [{_, :ok}] =
+      conn
+      |> :lake.publish_sync(publisher_id, messages)
+      |> Enum.uniq_by(fn {_, result} -> result end)
 
     :ok
   end
